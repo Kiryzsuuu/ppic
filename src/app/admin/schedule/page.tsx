@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import SchedulePreview from "../../SchedulePreview";
 
 type Simulator = { id: string; category: string; name: string };
 
@@ -261,6 +262,8 @@ export default function AdminSchedulePage() {
 
   return (
     <div className="grid gap-6">
+      <SchedulePreview authed={true} />
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Manajemen Slot Jadwal</h1>
@@ -353,7 +356,7 @@ export default function AdminSchedulePage() {
           </button>
 
           <div className="text-xs text-zinc-500 md:col-span-4">
-            Catatan: slot yang bentrok dengan slot lain akan dilewati.
+            Catatan: slot yang bentrok dengan slot lain akan dilewati. Mode "Bulanan" akan mengisi slot harian sampai akhir bulan (berdasarkan bulan dari slot pertama).
           </div>
         </form>
       </section>

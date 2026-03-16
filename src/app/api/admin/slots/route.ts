@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
+import { getWetSessionKeyForRange } from "@/lib/schedule";
 
 const CreateSlotSchema = z.object({
   simulatorId: z.string().min(1),
@@ -38,6 +39,25 @@ export async function POST(req: NextRequest) {
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
     if (!(startAt < endAt)) return jsonError("Waktu mulai harus lebih awal dari waktu selesai.", 400);
+
+    if (!getWetSessionKeyForRange(startAt, endAt)) {
+      return jsonError(
+        "Slot harus sesuai sesi WET (07:30–11:30 atau 11:45–15:45 WIB).",
+        400,
+      );
+    }
+
+    const dryConflict = await prisma.booking.findFirst({
+      where: {
+        simulatorId: input.simulatorId,
+        leaseType: "DRY",
+        status: { in: ["CONFIRMED", "COMPLETED"] },
+        requestedStartAt: { not: null, lt: endAt },
+        requestedEndAt: { not: null, gt: startAt },
+      },
+      select: { id: true },
+    });
+    if (dryConflict) return jsonError("Slot bentrok dengan booking Dry Leased yang sudah terkonfirmasi", 409);
 
     const conflict = await prisma.scheduleSlot.findFirst({
       where: {

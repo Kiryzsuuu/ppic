@@ -29,6 +29,29 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!payment) return jsonError("Payment tidak ditemukan", 404);
     if (payment.status !== "PAID") return jsonError("Payment tidak dalam status PAID", 400);
 
+    if (input.approve && payment.booking.leaseType === "DRY") {
+      const reqStart = payment.booking.requestedStartAt;
+      const reqEnd = payment.booking.requestedEndAt;
+      if (!reqStart || !reqEnd) return jsonError("Jadwal DRY belum diisi", 400);
+
+      const wetBookedConflict = await prisma.scheduleSlot.findFirst({
+        where: {
+          simulatorId: payment.booking.simulatorId,
+          bookingId: { not: null },
+          startAt: { lt: reqEnd },
+          endAt: { gt: reqStart },
+        },
+        select: { id: true },
+      });
+
+      if (wetBookedConflict) {
+        return jsonError(
+          "Jadwal DRY bentrok dengan sesi WET yang sudah terisi (BOOKED)",
+          409,
+        );
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const p = await tx.payment.update({
         where: { id },

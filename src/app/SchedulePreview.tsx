@@ -7,6 +7,7 @@ type Slot = {
   startAt: string;
   endAt: string;
   status: "AVAILABLE" | "LOCKED" | "BOOKED";
+  leaseType: "WET" | "DRY";
   simulator: { category: string; name: string };
 };
 
@@ -75,6 +76,8 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
   const [simLoading, setSimLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [leaseView, setLeaseView] = useState<"ALL" | "WET" | "DRY">("ALL");
+
   const todayWibKey = useMemo(() => formatWibDateKey(new Date()), []);
 
   const [dateKey, setDateKey] = useState<string>(todayWibKey);
@@ -142,6 +145,7 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
     const closeMin = 15 * 60 + 45;
 
     return slots
+      .filter((s) => (leaseView === "ALL" ? true : s.leaseType === leaseView))
       .filter((s) => {
         const startMin = toWibMinutes(s.startAt);
         const endMin = toWibMinutes(s.endAt);
@@ -155,34 +159,30 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
         const sb = `${b.simulator.category} ${b.simulator.name}`;
         return sa.localeCompare(sb);
       });
-  }, [slots]);
+  }, [slots, leaseView]);
 
   const timeBlocks = useMemo(() => {
-    const openMin = 7 * 60 + 30;
-    const closeMin = 15 * 60 + 45;
     const stepMin = 60;
+    const blocks: { label: string; startMs: number; endMs: number }[] = [];
 
-    const blocks: {
-      label: string;
-      startMs: number;
-      endMs: number;
-    }[] = [];
+    const ranges = [
+      { startMin: 7 * 60 + 30, endMin: 11 * 60 + 30 },
+      { startMin: 11 * 60 + 45, endMin: 15 * 60 + 45 },
+    ];
 
-    for (let startMin = openMin; startMin < closeMin; startMin += stepMin) {
-      const endMin = Math.min(startMin + stepMin, closeMin);
+    for (const r of ranges) {
+      for (let startMin = r.startMin; startMin < r.endMin; startMin += stepMin) {
+        const endMin = Math.min(startMin + stepMin, r.endMin);
 
-      const startIso = new Date(
-        `${dateKey}T${minutesToHm(startMin)}:00+07:00`
-      ).toISOString();
-      const endIso = new Date(
-        `${dateKey}T${minutesToHm(endMin)}:00+07:00`
-      ).toISOString();
+        const startIso = new Date(`${dateKey}T${minutesToHm(startMin)}:00+07:00`).toISOString();
+        const endIso = new Date(`${dateKey}T${minutesToHm(endMin)}:00+07:00`).toISOString();
 
-      blocks.push({
-        label: `${minutesToHm(startMin)}-${minutesToHm(endMin)}`,
-        startMs: new Date(startIso).getTime(),
-        endMs: new Date(endIso).getTime(),
-      });
+        blocks.push({
+          label: `${minutesToHm(startMin)}-${minutesToHm(endMin)}`,
+          startMs: new Date(startIso).getTime(),
+          endMs: new Date(endIso).getTime(),
+        });
+      }
     }
 
     return blocks;
@@ -261,6 +261,19 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
             onChange={(e) => setDateKey(e.target.value)}
             className="h-9 w-[220px] rounded-lg border border-zinc-200 bg-white px-2 text-sm"
           />
+        </label>
+
+        <label className="grid gap-1">
+          <span className="text-[11px] text-zinc-600">Tampilkan</span>
+          <select
+            value={leaseView}
+            onChange={(e) => setLeaseView(e.target.value as any)}
+            className="h-9 w-[220px] rounded-lg border border-zinc-200 bg-white px-2 text-sm"
+          >
+            <option value="ALL">Semua (WET + DRY)</option>
+            <option value="WET">Wet Leased (per sesi)</option>
+            <option value="DRY">Dry Leased (per jam)</option>
+          </select>
         </label>
         <div className="pb-1 text-xs text-zinc-500">Jam operasional: 07:30–15:45</div>
       </div>

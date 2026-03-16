@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "prisma generate",
@@ -13,6 +13,12 @@
     "prisma:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "db:reset": "prisma db push --force-reset",
+    "db:clear-slots": "tsx scripts/clear-slots.ts",
+    "db:check-conflicts": "tsx scripts/check-dry-wet-conflicts.ts",
+    "db:find-simulators": "tsx scripts/find-simulators.ts",
+    "db:inspect-simulator": "tsx scripts/inspect-simulator-day.ts",
+    "db:split-wet-sessions": "tsx scripts/split-long-slots-into-sessions.ts",
+    "db:create-test-dry": "tsx scripts/create-test-dry-booking.ts",
     "db:fix-mongo-indexes": "tsx scripts/fix-mongo-sparse-unique-indexes.ts",
     "db:migrate:sqlite-to-mongo": "tsx scripts/migrate-sqlite-to-mongo.ts"
   },

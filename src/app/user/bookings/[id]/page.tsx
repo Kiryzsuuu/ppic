@@ -64,7 +64,7 @@ export default function BookingDetailPage() {
 
     const b = json.data.booking;
     if (b.leaseType === "WET" && b.payment?.status === "VALIDATED" && !b.slot) {
-      const slotRes = await fetch(`/api/slots?simulatorId=${encodeURIComponent(b.simulatorId)}`);
+      const slotRes = await fetch(`/api/slots?simulatorId=${encodeURIComponent(b.simulatorId)}&leaseType=WET`);
       const slotJson = await slotRes.json().catch(() => null);
       if (slotRes.ok && slotJson?.ok) {
         setSlots(slotJson.data.slots);

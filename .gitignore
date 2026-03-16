@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# runtime uploads (local/dev)
+/uploads/
+
+# prisma local artifacts (do not commit)
+/prisma/dev.db
+/prisma/generated/

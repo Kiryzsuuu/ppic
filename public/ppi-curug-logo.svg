@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="128" viewBox="0 0 176 128" role="img" aria-label="PPI Curug">
+  <rect x="8" y="8" width="160" height="112" rx="20" fill="#18181b" />
+  <text x="88" y="64" text-anchor="middle" dominant-baseline="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="34" font-weight="700" fill="#ffffff">PPI</text>
+  <text x="88" y="88" text-anchor="middle" dominant-baseline="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="18" font-weight="600" fill="#ffffff" opacity="0.9">Curug</text>
+</svg>

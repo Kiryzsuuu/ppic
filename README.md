@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PPI Curug Simulator Training
 
-## Getting Started
+Aplikasi web **Manajemen Penyewaan Simulator Pesawat** untuk **PPI Curug Simulator Training** dengan role:
 
-First, run the development server:
+- **User**: registrasi, upload dokumen, membuat booking, pembayaran, memilih slot jadwal, melihat sertifikat (QR)
+- **Admin**: verifikasi profil/dokumen, approve booking, kelola slot jadwal, terbitkan sertifikat
+- **Finance**: menerbitkan dokumen legal + VA, validasi pembayaran, upload/preview dokumen legal, preview bukti bayar
+- **Instructor**: isi logbook untuk Wet Leased
+
+Teknologi: **Next.js (App Router) + TypeScript + Tailwind + Prisma + MongoDB**.
+
+## Lokasi Project
+
+Project Next.js ada di folder:
+
+`PPIC/ppi-curug-simulator-training`
+
+## Setup (Development)
+
+1) Install dependency
+
+```bash
+npm install
+```
+
+2) Siapkan env
+
+- Copy `.env.example` → `.env` (jika belum ada)
+- Pastikan minimal ada:
+	- `DATABASE_URL="mongodb+srv://.../<db>?retryWrites=true&w=majority"`
+	- `JWT_SECRET="..."`
+	- (opsional) `UPLOAD_DIR="uploads"`
+
+Untuk fitur verifikasi email OTP, isi juga konfigurasi SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, dst). Pada mode development, jika SMTP belum diisi, OTP akan ditampilkan di log server.
+
+3) Inisialisasi database + seed
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate
+npm run db:seed
+```
+
+4) Jalankan dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Akun Seed (dev)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `admin / admin123`
+- `finance / finance123`
+- `instructor / instructor123`
 
-## Learn More
+## Catatan Upload
 
-To learn more about Next.js, take a look at the following resources:
+File upload disimpan ke folder `uploads/` (default). Metadata disimpan di MongoDB.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Logo Header
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Header menggunakan logo dari `public/ppi-curug-logo.png`. Simpan file logo (PNG) ke path tersebut agar tampil di header.
 
-## Deploy on Vercel
+## Melihat Database
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Database default menggunakan MongoDB (lihat `DATABASE_URL` di `.env`).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Opsi cepat:
+
+1) Prisma Studio
+
+```bash
+npx prisma studio
+```
+
+2) MongoDB Atlas UI
+
+Gunakan halaman Atlas untuk melihat collections dan dokumen.
+
+## Build
+
+```bash
+npm run build
+npm start
+```

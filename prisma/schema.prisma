@@ -1,0 +1,399 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model AppSetting {
+  id        String   @id @default(cuid()) @map("_id")
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  USER
+  ADMIN
+  FINANCE
+  INSTRUCTOR
+}
+
+enum RegistrationType {
+  PERSONAL
+  COMPANY
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DocumentType {
+  LICENSE
+  MEDICAL
+  ID
+  LOGBOOK
+  PHOTO
+  CV
+}
+
+enum LeaseType {
+  WET
+  DRY
+}
+
+enum BookingStatus {
+  DRAFT
+  WAIT_ADMIN_VERIFICATION
+  WAIT_FINANCE_DOCS
+  WAIT_PAYMENT
+  PAYMENT_VALIDATION
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum SlotStatus {
+  AVAILABLE
+  LOCKED
+  BOOKED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  VALIDATED
+  REJECTED
+}
+
+enum LegalDocType {
+  PKS
+  BERITA_ACARA
+}
+
+enum LegalDocStatus {
+  DRAFT
+  ISSUED
+}
+
+enum TrainingCode {
+  PPC
+  INITIAL_ATPL
+  TYPE_RATING
+  OTHER
+}
+
+enum DeviceType {
+  FFS
+  FTD
+}
+
+enum PaymentMethod {
+  QRIS
+  TRANSFER
+}
+
+enum AircraftCategory {
+  AIRBUS
+  BOEING
+}
+
+model User {
+  id           String   @id @default(cuid()) @map("_id")
+  username     String   @unique
+  email        String?  @unique
+  emailVerifiedAt DateTime?
+  passwordHash String
+  role         Role     @default(USER)
+  lastLoginAt  DateTime?
+  lastLoginIp  String?
+  lastLoginUserAgent String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile Profile?
+  emailVerification EmailVerification?
+  passwordResetTokens PasswordResetToken[]
+  passwordResetOtps PasswordResetOtp[]
+
+  bookings Booking[]
+
+  verifiedProfiles Profile[] @relation("ProfileVerifiedBy")
+  verifiedDocuments Document[] @relation("DocumentVerifiedBy")
+
+  createdSlots ScheduleSlot[] @relation("SlotCreatedBy")
+
+  validatedPayments Payment[] @relation("PaymentValidatedBy")
+  issuedLegalDocs LegalDocument[] @relation("LegalDocIssuedBy")
+  logbookEntries LogbookEntry[] @relation("LogbookByInstructor")
+  issuedCertificates Certificate[] @relation("CertificateIssuedBy")
+
+  auditLogs AuditLog[]
+  notifications Notification[]
+}
+
+model AuditLog {
+  id         String   @id @default(cuid()) @map("_id")
+  actorId    String?
+  actorRole  Role?
+  action     String
+  targetType String?
+  targetId   String?
+  message    String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  title     String
+  body      String
+  kind      String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([readAt])
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String   @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([usedAt])
+}
+
+model PasswordResetOtp {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String   @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([expiresAt])
+}
+
+model Profile {
+  id               String            @id @default(cuid()) @map("_id")
+  userId           String            @unique
+  registrationType RegistrationType  @default(PERSONAL)
+
+  fullName     String
+  companyName  String?
+  npwp         String?
+  
+  email        String?
+  placeOfBirth String?
+  dateOfBirth  DateTime?
+  ktpNumber    String?
+
+  licenseNo    String?
+  flightHours  Int?
+
+  phone        String?
+  address      String?
+
+  status       VerificationStatus   @default(PENDING)
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?               @relation("ProfileVerifiedBy", fields: [verifiedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  documents Document[]
+}
+
+model Document {
+  id           String             @id @default(cuid()) @map("_id")
+  profileId    String
+  type         DocumentType
+  fileName     String
+  mimeType     String
+  storagePath  String
+
+  status       VerificationStatus @default(PENDING)
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?              @relation("DocumentVerifiedBy", fields: [verifiedById], references: [id])
+
+  uploadedAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id])
+
+  @@index([profileId, type])
+}
+
+model Simulator {
+  id        String          @id @default(cuid()) @map("_id")
+  category  AircraftCategory
+  name      String
+  createdAt DateTime @default(now())
+
+  slots    ScheduleSlot[]
+  bookings Booking[]
+
+  @@unique([category, name])
+}
+
+model ScheduleSlot {
+  id              String     @id @default(cuid()) @map("_id")
+  simulatorId     String
+  startAt         DateTime
+  endAt           DateTime
+  status          SlotStatus @default(AVAILABLE)
+
+  bookingId       String?    @unique
+  booking         Booking?   @relation(fields: [bookingId], references: [id])
+
+  createdByAdminId String
+  createdByAdmin   User      @relation("SlotCreatedBy", fields: [createdByAdminId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  simulator Simulator @relation(fields: [simulatorId], references: [id])
+
+  @@index([simulatorId, startAt, endAt])
+}
+
+model Booking {
+  id           String        @id @default(cuid()) @map("_id")
+  userId       String
+  simulatorId  String
+
+  leaseType    LeaseType
+  trainingCode TrainingCode
+  trainingName String
+
+  deviceType   DeviceType?
+  personCount  Int?          @default(1)
+  paymentMethod PaymentMethod? @default(QRIS)
+  preferredSlotId String?
+
+  // For DRY leased: user-proposed schedule (not admin-provided slot)
+  requestedStartAt DateTime?
+  requestedEndAt   DateTime?
+
+  status       BookingStatus @default(DRAFT)
+
+  requestedAt  DateTime      @default(now())
+  confirmedAt  DateTime?
+  completedAt  DateTime?
+
+  user      User      @relation(fields: [userId], references: [id])
+  simulator Simulator @relation(fields: [simulatorId], references: [id])
+
+  slot   ScheduleSlot?
+  payment Payment?
+  legalDocument LegalDocument?
+  logbookEntries LogbookEntry[]
+  certificate Certificate?
+
+  @@index([userId, status])
+}
+
+model Payment {
+  id               String        @id @default(cuid()) @map("_id")
+  bookingId        String        @unique
+  amount           Int
+  vaNumber         String        @unique
+  status           PaymentStatus @default(UNPAID)
+
+  proofFileName    String?
+  proofMimeType    String?
+  proofStoragePath String?
+
+  paidAt           DateTime?
+
+  validatedById    String?
+  validatedBy      User?         @relation("PaymentValidatedBy", fields: [validatedById], references: [id])
+  validatedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model LegalDocument {
+  id            String         @id @default(cuid()) @map("_id")
+  bookingId     String         @unique
+  type          LegalDocType
+  status        LegalDocStatus @default(DRAFT)
+
+  fileName      String?
+  mimeType      String?
+  storagePath   String?
+
+  issuedById    String
+  issuedBy      User           @relation("LegalDocIssuedBy", fields: [issuedById], references: [id])
+  issuedAt      DateTime       @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model LogbookEntry {
+  id           String   @id @default(cuid()) @map("_id")
+  bookingId    String
+  instructorId String
+  notes        String
+  result       String
+  createdAt    DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  instructor User @relation("LogbookByInstructor", fields: [instructorId], references: [id])
+
+  @@index([bookingId, createdAt])
+}
+
+model Certificate {
+  id           String   @id @default(cuid()) @map("_id")
+  bookingId    String   @unique
+  qrValue      String   @unique
+  issuedById   String
+  issuedBy     User     @relation("CertificateIssuedBy", fields: [issuedById], references: [id])
+  issuedAt     DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import SchedulePreview from "../../SchedulePreview";
+import { WET_SESSIONS_WIB, getWetSessionKeyForRange, toWibMinutes } from "@/lib/schedule";
 
 type Simulator = { id: string; category: string; name: string };
 
@@ -26,6 +27,7 @@ type UserLite = {
 export default function AdminSchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<string | null>(null);
+  const [staffResult, setStaffResult] = useState<string | null>(null);
   const [simulators, setSimulators] = useState<Simulator[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [users, setUsers] = useState<UserLite[]>([]);
@@ -43,11 +45,22 @@ export default function AdminSchedulePage() {
   const [editEndAt, setEditEndAt] = useState("");
   const [confirmDeleteSlotId, setConfirmDeleteSlotId] = useState<string | null>(null);
 
-  const [bookUserIdBySlot, setBookUserIdBySlot] = useState<Record<string, string>>({});
-  const [bookPersonCountBySlot, setBookPersonCountBySlot] = useState<Record<string, 1 | 2>>({});
-  const [bookTrainingCodeBySlot, setBookTrainingCodeBySlot] = useState<Record<string, "PPC" | "TYPE_RATING" | "OTHER">>({});
-  const [bookTrainingNameBySlot, setBookTrainingNameBySlot] = useState<Record<string, string>>({});
-  const [bookingSlotId, setBookingSlotId] = useState<string | null>(null);
+  const [staffLeaseType, setStaffLeaseType] = useState<"WET" | "DRY">("WET");
+  const [staffUserId, setStaffUserId] = useState<string>("");
+  const [staffDateKey, setStaffDateKey] = useState<string>("");
+
+  // WET
+  const [staffWetSessionKey, setStaffWetSessionKey] = useState<"MORNING" | "AFTERNOON">("MORNING");
+  const [staffTrainingCode, setStaffTrainingCode] = useState<"PPC" | "TYPE_RATING" | "OTHER">("PPC");
+  const [staffTrainingName, setStaffTrainingName] = useState<string>("Pilot Proficiency Training (PPC)");
+  const [staffPersonCount, setStaffPersonCount] = useState<1 | 2>(1);
+
+  // DRY
+  const [staffDeviceType, setStaffDeviceType] = useState<"FFS" | "FTD">("FFS");
+  const [staffDrySessionKey, setStaffDrySessionKey] = useState<"MORNING" | "AFTERNOON">("MORNING");
+  const [staffStartMin, setStaffStartMin] = useState<number>(7 * 60 + 30);
+  const [staffEndMin, setStaffEndMin] = useState<number>(8 * 60 + 30);
+  const [staffBooking, setStaffBooking] = useState(false);
 
   function mapApiMessage(msg: string) {
     if (msg.includes("startAt harus < endAt")) return "Waktu mulai harus lebih awal dari waktu selesai.";
@@ -71,6 +84,28 @@ export default function AdminSchedulePage() {
     setUsersLoading(false);
   }
 
+  function todayWibDateKey() {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+  }
+
+  function fmtMin(m: number) {
+    const hh = String(Math.floor(m / 60)).padStart(2, "0");
+    const mm = String(m % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  function dryStartOptions(sessionKey: "MORNING" | "AFTERNOON") {
+    return sessionKey === "MORNING"
+      ? [7 * 60 + 30, 8 * 60 + 30, 9 * 60 + 30, 10 * 60 + 30]
+      : [11 * 60 + 45, 12 * 60 + 45, 13 * 60 + 45, 14 * 60 + 45];
+  }
+
+  function dryEndOptions(sessionKey: "MORNING" | "AFTERNOON") {
+    return sessionKey === "MORNING"
+      ? [8 * 60 + 30, 9 * 60 + 30, 10 * 60 + 30, 11 * 60 + 30]
+      : [12 * 60 + 45, 13 * 60 + 45, 14 * 60 + 45, 15 * 60 + 45];
+  }
+
   async function loadSlots(simId?: string) {
     const id = simId ?? simulatorId;
     if (!id) return;
@@ -89,6 +124,27 @@ export default function AdminSchedulePage() {
     loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!staffDateKey) setStaffDateKey(todayWibDateKey());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!staffUserId && users.length > 0) setStaffUserId(users[0].id);
+  }, [staffUserId, users]);
+
+  useEffect(() => {
+    // keep DRY range valid when session changes
+    const starts = dryStartOptions(staffDrySessionKey);
+    const ends = dryEndOptions(staffDrySessionKey);
+    if (!starts.includes(staffStartMin)) setStaffStartMin(starts[0]);
+    if (!ends.includes(staffEndMin) || staffEndMin <= staffStartMin) {
+      const nextEnd = ends.find((e) => e > staffStartMin) ?? ends[0];
+      setStaffEndMin(nextEnd);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staffDrySessionKey, staffStartMin]);
 
   useEffect(() => {
     loadSlots();
@@ -284,40 +340,69 @@ export default function AdminSchedulePage() {
     setLoading(false);
   }
 
-  async function bookSlot(slot: Slot) {
-    const userId = bookUserIdBySlot[slot.id] ?? "";
-    const personCount = bookPersonCountBySlot[slot.id] ?? 1;
-    const trainingCode = bookTrainingCodeBySlot[slot.id] ?? "PPC";
-    const trainingName = (bookTrainingNameBySlot[slot.id] ?? "").trim();
+  async function staffBook(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBulkResult(null);
+    setStaffResult(null);
 
-    if (!userId) {
+    if (!staffUserId) {
       setError("Pilih user terlebih dahulu.");
       return;
     }
-    if (!trainingName) {
-      setError("Training Name wajib diisi.");
+    if (!simulatorId) {
+      setError("Pilih simulator terlebih dahulu.");
+      return;
+    }
+    if (!staffDateKey) {
+      setError("Pilih tanggal terlebih dahulu.");
       return;
     }
 
-    setBookingSlotId(slot.id);
-    setError(null);
-    setBulkResult(null);
+    if (staffLeaseType === "WET" && !staffTrainingName.trim()) {
+      setError("Training Name wajib diisi untuk WET.");
+      return;
+    }
 
-    const res = await fetch(`/api/admin/slots/${encodeURIComponent(slot.id)}/book`, {
+    setStaffBooking(true);
+
+    const payload =
+      staffLeaseType === "WET"
+        ? {
+            leaseType: "WET" as const,
+            userId: staffUserId,
+            simulatorId,
+            dateKey: staffDateKey,
+            sessionKey: staffWetSessionKey,
+            trainingCode: staffTrainingCode,
+            trainingName: staffTrainingName.trim(),
+            personCount: staffPersonCount,
+          }
+        : {
+            leaseType: "DRY" as const,
+            userId: staffUserId,
+            simulatorId,
+            dateKey: staffDateKey,
+            deviceType: staffDeviceType,
+            startMin: staffStartMin,
+            endMin: staffEndMin,
+          };
+
+    const res = await fetch("/api/admin/bookings/staff-book", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userId, personCount, trainingCode, trainingName }),
+      body: JSON.stringify(payload),
     });
-
     const json = await res.json().catch(() => null);
     if (!res.ok) {
-      setError(mapApiMessage(json?.error?.message ?? "Gagal booking slot"));
-      setBookingSlotId(null);
+      setError(mapApiMessage(json?.error?.message ?? "Gagal booking"));
+      setStaffBooking(false);
       return;
     }
 
     await loadSlots();
-    setBookingSlotId(null);
+    setStaffResult("Booking berhasil dibuat (langsung CONFIRMED).");
+    setStaffBooking(false);
   }
 
   return (
@@ -343,6 +428,212 @@ export default function AdminSchedulePage() {
           {bulkResult}
         </div>
       ) : null}
+
+      <section className="rounded-2xl border border-zinc-200 bg-white p-6 grid gap-4">
+        <div className="text-sm font-semibold">Booking untuk User</div>
+
+        {staffResult ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {staffResult}
+          </div>
+        ) : null}
+
+        <form onSubmit={staffBook} className="grid gap-3 md:grid-cols-6 md:items-end">
+          <label className="grid gap-1 text-sm md:col-span-2">
+            <span className="font-medium">User</span>
+            <select
+              className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+              value={staffUserId}
+              onChange={(e) => setStaffUserId(e.target.value)}
+              disabled={usersLoading || staffBooking}
+            >
+              <option value="" disabled>
+                {usersLoading ? "Memuat user..." : "Pilih user"}
+              </option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.profile?.fullName ? `${u.profile.fullName} — ` : ""}
+                  {u.username}
+                  {u.email ? ` (${u.email})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-sm md:col-span-2">
+            <span className="font-medium">Simulator</span>
+            <select
+              className="h-10 rounded-lg border border-zinc-200 px-3"
+              value={simulatorId}
+              onChange={(e) => setSimulatorId(e.target.value)}
+              disabled={staffBooking}
+            >
+              {simulators.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.category} {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-sm md:col-span-2">
+            <span className="font-medium">Leased Type</span>
+            <select
+              className="h-10 rounded-lg border border-zinc-200 px-3"
+              value={staffLeaseType}
+              onChange={(e) => setStaffLeaseType(e.target.value as "WET" | "DRY")}
+              disabled={staffBooking}
+            >
+              <option value="WET">Wet Leased</option>
+              <option value="DRY">Dry Leased</option>
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-sm md:col-span-2">
+            <span className="font-medium">Tanggal (WIB)</span>
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+              value={staffDateKey}
+              onChange={(e) => setStaffDateKey(e.target.value)}
+              disabled={staffBooking}
+            />
+          </label>
+
+          {staffLeaseType === "WET" ? (
+            <>
+              <label className="grid gap-1 text-sm md:col-span-2">
+                <span className="font-medium">Sesi</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={staffWetSessionKey}
+                  onChange={(e) => setStaffWetSessionKey(e.target.value as "MORNING" | "AFTERNOON")}
+                  disabled={staffBooking}
+                >
+                  <option value="MORNING">Morning ({fmtMin(WET_SESSIONS_WIB.MORNING.startMin)}–{fmtMin(WET_SESSIONS_WIB.MORNING.endMin)})</option>
+                  <option value="AFTERNOON">Afternoon ({fmtMin(WET_SESSIONS_WIB.AFTERNOON.startMin)}–{fmtMin(WET_SESSIONS_WIB.AFTERNOON.endMin)})</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Person</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={staffPersonCount}
+                  onChange={(e) => setStaffPersonCount((Number(e.target.value) as 1 | 2) ?? 1)}
+                  disabled={staffBooking}
+                >
+                  <option value={1}>1</option>
+                  <option value={2}>2</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Training</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={staffTrainingCode}
+                  onChange={(e) => {
+                    const v = e.target.value as "PPC" | "TYPE_RATING" | "OTHER";
+                    setStaffTrainingCode(v);
+                    setStaffTrainingName(
+                      v === "PPC" ? "Pilot Proficiency Training (PPC)" : v === "TYPE_RATING" ? "Initial Type Rating" : staffTrainingName,
+                    );
+                  }}
+                  disabled={staffBooking}
+                >
+                  <option value="PPC">PPC</option>
+                  <option value="TYPE_RATING">Type Rating</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm md:col-span-4">
+                <span className="font-medium">Training Name</span>
+                <input
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={staffTrainingName}
+                  onChange={(e) => setStaffTrainingName(e.target.value)}
+                  disabled={staffBooking}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="grid gap-1 text-sm md:col-span-2">
+                <span className="font-medium">Sesi DRY</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={staffDrySessionKey}
+                  onChange={(e) => setStaffDrySessionKey(e.target.value as "MORNING" | "AFTERNOON")}
+                  disabled={staffBooking}
+                >
+                  <option value="MORNING">Morning</option>
+                  <option value="AFTERNOON">Afternoon</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm md:col-span-2">
+                <span className="font-medium">Device</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={staffDeviceType}
+                  onChange={(e) => setStaffDeviceType(e.target.value as "FFS" | "FTD")}
+                  disabled={staffBooking}
+                >
+                  <option value="FFS">FFS</option>
+                  <option value="FTD">FTD</option>
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Mulai</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={String(staffStartMin)}
+                  onChange={(e) => setStaffStartMin(Number(e.target.value))}
+                  disabled={staffBooking}
+                >
+                  {dryStartOptions(staffDrySessionKey).map((m) => (
+                    <option key={m} value={String(m)}>
+                      {fmtMin(m)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Selesai</span>
+                <select
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                  value={String(staffEndMin)}
+                  onChange={(e) => setStaffEndMin(Number(e.target.value))}
+                  disabled={staffBooking}
+                >
+                  {dryEndOptions(staffDrySessionKey)
+                    .filter((m) => m > staffStartMin)
+                    .map((m) => (
+                      <option key={m} value={String(m)}>
+                        {fmtMin(m)}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </>
+          )}
+
+          <button
+            disabled={staffBooking || usersLoading}
+            className="h-10 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 md:col-span-2"
+          >
+            {staffBooking ? "Memproses..." : "Booking"}
+          </button>
+        </form>
+
+        <div className="text-xs text-zinc-500">
+          Catatan: booking staff akan langsung membuat booking status CONFIRMED. Untuk WET, slot sesi harus sudah dibuat (AVAILABLE) oleh admin.
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 grid gap-4">
         <div className="text-sm font-semibold">Buat Slot</div>
@@ -427,14 +718,36 @@ export default function AdminSchedulePage() {
           {slots.length === 0 ? (
             <div className="text-sm text-zinc-600">Belum ada slot.</div>
           ) : (
-            slots.map((s) => (
-              <div key={s.id} className="rounded-xl border border-zinc-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-medium">{new Date(s.startAt).toLocaleString()} - {new Date(s.endAt).toLocaleString()}</div>
-                  <div className="text-xs text-zinc-600">{s.status}</div>
-                </div>
-                <div className="mt-1 text-xs text-zinc-600">{s.simulator.category} {s.simulator.name}</div>
-                {s.booking ? <div className="mt-2 text-xs text-zinc-600">Booking: {s.booking.id} ({s.booking.user?.username ?? "-"})</div> : null}
+            slots.map((s) => {
+              const start = new Date(s.startAt);
+              const end = new Date(s.endAt);
+              const sessionKey = getWetSessionKeyForRange(start, end);
+              const isFullDayWetRange =
+                toWibMinutes(start) === WET_SESSIONS_WIB.MORNING.startMin &&
+                toWibMinutes(end) === WET_SESSIONS_WIB.AFTERNOON.endMin;
+
+              return (
+                <div key={s.id} className="rounded-xl border border-zinc-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">
+                      {new Date(s.startAt).toLocaleString()} - {new Date(s.endAt).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-zinc-600">{s.status}</div>
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-600">
+                    {s.simulator.category} {s.simulator.name}
+                  </div>
+                  {s.booking ? (
+                    <div className="mt-2 text-xs text-zinc-600">
+                      Booking: {s.booking.id} ({s.booking.user?.username ?? "-"})
+                    </div>
+                  ) : null}
+
+                  {s.status === "AVAILABLE" && !s.booking && !sessionKey ? (
+                    <div className="mt-2 text-xs text-amber-700">
+                      Slot ini bukan sesi WET. Silakan edit agar sesuai sesi (Morning/Afternoon).
+                    </div>
+                  ) : null}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
@@ -444,24 +757,6 @@ export default function AdminSchedulePage() {
                   >
                     Edit Jadwal
                   </button>
-
-                  {s.status === "AVAILABLE" && !s.booking ? (
-                    <button
-                      disabled={loading || usersLoading}
-                      onClick={() => {
-                        setError(null);
-                        setBulkResult(null);
-                        const defaultUserId = users[0]?.id ?? "";
-                        setBookUserIdBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? defaultUserId }));
-                        setBookPersonCountBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? 1 }));
-                        setBookTrainingCodeBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? "PPC" }));
-                        setBookTrainingNameBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? "Pilot Proficiency Training (PPC)" }));
-                      }}
-                      className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800 disabled:opacity-60"
-                    >
-                      Bookingkan Slot
-                    </button>
-                  ) : null}
 
                   {s.status === "BOOKED" && s.booking ? (
                     <button
@@ -506,83 +801,6 @@ export default function AdminSchedulePage() {
                   ) : null}
                 </div>
 
-                {s.status === "AVAILABLE" && !s.booking && (bookUserIdBySlot[s.id] !== undefined || bookTrainingNameBySlot[s.id] !== undefined) ? (
-                  <div className="mt-3 grid gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 md:grid-cols-4 md:items-end">
-                    <label className="grid gap-1 text-sm md:col-span-2">
-                      <span className="font-medium">User</span>
-                      <select
-                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
-                        value={bookUserIdBySlot[s.id] ?? ""}
-                        onChange={(e) => setBookUserIdBySlot((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                      >
-                        <option value="" disabled>
-                          Pilih user
-                        </option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.profile?.fullName ? `${u.profile.fullName} — ` : ""}{u.username}{u.email ? ` (${u.email})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="grid gap-1 text-sm">
-                      <span className="font-medium">Person</span>
-                      <select
-                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
-                        value={bookPersonCountBySlot[s.id] ?? 1}
-                        onChange={(e) => setBookPersonCountBySlot((prev) => ({ ...prev, [s.id]: (Number(e.target.value) as 1 | 2) }))}
-                      >
-                        <option value={1}>1</option>
-                        <option value={2}>2</option>
-                      </select>
-                    </label>
-
-                    <label className="grid gap-1 text-sm">
-                      <span className="font-medium">Training</span>
-                      <select
-                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
-                        value={bookTrainingCodeBySlot[s.id] ?? "PPC"}
-                        onChange={(e) => {
-                          const v = e.target.value as "PPC" | "TYPE_RATING" | "OTHER";
-                          setBookTrainingCodeBySlot((prev) => ({ ...prev, [s.id]: v }));
-                          setBookTrainingNameBySlot((prev) => ({
-                            ...prev,
-                            [s.id]: v === "PPC" ? "Pilot Proficiency Training (PPC)" : v === "TYPE_RATING" ? "Initial Type Rating" : (prev[s.id] ?? "Other"),
-                          }));
-                        }}
-                      >
-                        <option value="PPC">PPC</option>
-                        <option value="TYPE_RATING">Type Rating</option>
-                        <option value="OTHER">Other</option>
-                      </select>
-                    </label>
-
-                    <label className="grid gap-1 text-sm md:col-span-3">
-                      <span className="font-medium">Training Name</span>
-                      <input
-                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
-                        value={bookTrainingNameBySlot[s.id] ?? ""}
-                        onChange={(e) => setBookTrainingNameBySlot((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                      />
-                    </label>
-
-                    <div className="flex items-center gap-2 md:col-span-1">
-                      <button
-                        disabled={loading || usersLoading || bookingSlotId === s.id}
-                        onClick={() => void bookSlot(s)}
-                        className="h-10 w-full rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
-                      >
-                        {bookingSlotId === s.id ? "Memproses..." : "Booking"}
-                      </button>
-                    </div>
-
-                    <div className="text-xs text-zinc-500 md:col-span-4">
-                      Catatan: booking ini langsung mengunci slot (status CONFIRMED + slot BOOKED).
-                    </div>
-                  </div>
-                ) : null}
-
                 {editingId === s.id ? (
                   <div className="mt-3 grid gap-3 md:grid-cols-3 md:items-end">
                     <label className="grid gap-1 text-sm">
@@ -622,7 +840,8 @@ export default function AdminSchedulePage() {
                   </div>
                 ) : null}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>

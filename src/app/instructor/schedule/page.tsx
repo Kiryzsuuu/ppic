@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/rbac";
-import { redirect } from "next/navigation";
+import { getWetSessionKeyForRange } from "@/lib/schedule";
+import StaffBookingForm from "./StaffBookingForm";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ type UserLite = {
   profile?: { fullName: string } | null;
 };
 
+type Simulator = { id: string; category: string; name: string };
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, cache: "no-store" });
   const json = (await res.json().catch(() => null)) as T | null;
@@ -47,22 +50,30 @@ function toLocal(dateIso: string) {
 export default async function InstructorSchedulePage() {
   await requireRole(["INSTRUCTOR"]);
 
-  const [slotsRes, usersRes] = await Promise.all([
+  const [slotsRes, usersRes, simsRes] = await Promise.all([
     fetchJson<ApiRes<{ slots: Slot[] }>>("/api/instructor/slots"),
     fetchJson<ApiRes<{ users: UserLite[] }>>("/api/instructor/users"),
+    fetchJson<ApiRes<{ simulators: Simulator[] }>>("/api/simulators"),
   ]);
 
   const slots = slotsRes.ok ? slotsRes.data.slots : [];
   const users = usersRes.ok ? usersRes.data.users : [];
+  const simulators = simsRes.ok ? simsRes.data.simulators : [];
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Jadwal Simulator (Instructor)</h1>
-          <div className="mt-1 text-sm text-zinc-600">Booking slot WET untuk user dari daftar slot.</div>
+          <div className="mt-1 text-sm text-zinc-600">Booking staff (WET/DRY) langsung CONFIRMED untuk user.</div>
         </div>
       </div>
+
+      {usersRes.ok && simsRes.ok ? (
+        <div className="mt-6">
+          <StaffBookingForm users={users} simulators={simulators} />
+        </div>
+      ) : null}
 
       {!slotsRes.ok ? (
         <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
@@ -71,9 +82,12 @@ export default async function InstructorSchedulePage() {
       ) : null}
 
       <div className="mt-6 grid gap-3">
-        {slots.map((s) => (
-          <div key={s.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+        {slots.map((s) => {
+          const isSession = !!getWetSessionKeyForRange(new Date(s.startAt), new Date(s.endAt));
+
+          return (
+            <div key={s.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold">{s.simulator?.name ?? "Simulator"}</div>
                 <div className="mt-1 text-sm text-zinc-600">
@@ -94,7 +108,7 @@ export default async function InstructorSchedulePage() {
                   {s.status}
                 </span>
               </div>
-            </div>
+              </div>
 
             {s.status === "BOOKED" && s.booking?.user ? (
               <div className="mt-3 text-sm text-zinc-700">
@@ -103,83 +117,19 @@ export default async function InstructorSchedulePage() {
               </div>
             ) : null}
 
-            {s.status === "AVAILABLE" ? (
-              <form
-                className="mt-4 grid gap-3 md:grid-cols-5 md:items-end"
-                action={async (formData) => {
-                  "use server";
-                  await requireRole(["INSTRUCTOR"]);
-
-                  const userId = String(formData.get("userId") ?? "");
-                  const trainingCode = String(formData.get("trainingCode") ?? "PPC");
-                  const trainingName = String(formData.get("trainingName") ?? "").trim();
-                  const personCountRaw = Number(formData.get("personCount") ?? 1);
-                  const personCount = personCountRaw === 2 ? 2 : 1;
-
-                  if (!userId || !trainingName) return;
-
-                  await fetch(`/api/instructor/slots/${encodeURIComponent(s.id)}/book`, {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ userId, personCount, trainingCode, trainingName }),
-                  });
-
-                  redirect("/instructor/schedule");
-                }}
-              >
-                <label className="grid gap-1 text-sm md:col-span-2">
-                  <span className="font-medium">User</span>
-                  <select name="userId" className="h-10 rounded-lg border border-zinc-200 bg-white px-3" defaultValue="">
-                    <option value="" disabled>
-                      Pilih user
-                    </option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.profile?.fullName ? `${u.profile.fullName} — ` : ""}
-                        {u.username}
-                        {u.email ? ` (${u.email})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  <span className="font-medium">Person</span>
-                  <select name="personCount" className="h-10 rounded-lg border border-zinc-200 bg-white px-3" defaultValue="1">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  <span className="font-medium">Training</span>
-                  <select name="trainingCode" className="h-10 rounded-lg border border-zinc-200 bg-white px-3" defaultValue="PPC">
-                    <option value="PPC">PPC</option>
-                    <option value="TYPE_RATING">Type Rating</option>
-                    <option value="OTHER">Other</option>
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm md:col-span-4">
-                  <span className="font-medium">Training Name</span>
-                  <input
-                    name="trainingName"
-                    className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
-                    defaultValue="Pilot Proficiency Training (PPC)"
-                  />
-                </label>
-
-                <button className="h-10 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 md:col-span-1">
-                  Booking
-                </button>
-
-                <div className="text-xs text-zinc-500 md:col-span-5">
-                  Setelah submit, refresh halaman untuk melihat perubahan status slot.
-                </div>
-              </form>
+            {s.status === "AVAILABLE" && !isSession ? (
+              <div className="mt-3 text-sm text-amber-700">Slot ini bukan sesi WET, jadi tidak bisa dibooking.</div>
             ) : null}
-          </div>
-        ))}
+
+            {s.status === "AVAILABLE" && isSession ? (
+              <div className="mt-3 text-xs text-zinc-500">
+                Slot sesi WET tersedia. Gunakan form booking di atas untuk membuat booking.
+              </div>
+            ) : null}
+
+            </div>
+          );
+        })}
       </div>
     </div>
   );

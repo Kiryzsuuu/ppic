@@ -26,6 +26,26 @@ export default async function InstructorDashboard() {
         <p className="mt-1 text-sm text-zinc-600">Pantau jadwal Wet Leased dan isi logbook.</p>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2">
+        <a
+          className="block rounded-2xl border border-zinc-200 bg-white p-6 hover:bg-zinc-50"
+          href="/instructor/schedule"
+          aria-label="Buka jadwal simulator (instructor)"
+        >
+          <div className="text-sm font-semibold">Dashboard Jadwal Simulator</div>
+          <div className="mt-1 text-sm text-zinc-600">Lihat slot dan bookingkan untuk user.</div>
+        </a>
+
+        <a
+          className="block rounded-2xl border border-zinc-200 bg-white p-6 hover:bg-zinc-50"
+          href="/instructor/users"
+          aria-label="Buka data user penerbang (instructor)"
+        >
+          <div className="text-sm font-semibold">Data User Penerbang</div>
+          <div className="mt-1 text-sm text-zinc-600">Lihat biodata dasar user.</div>
+        </a>
+      </div>
+
       <a
         className="block rounded-2xl border border-zinc-200 bg-white p-6 hover:bg-zinc-50"
         href="/instructor/logbook"

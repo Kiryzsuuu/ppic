@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { WET_SESSIONS_WIB } from "@/lib/schedule";
 
 type Slot = {
   id: string;
@@ -76,7 +77,7 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
   const [simLoading, setSimLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [leaseView, setLeaseView] = useState<"ALL" | "WET" | "DRY">("ALL");
+  const [leaseView, setLeaseView] = useState<"WET" | "DRY">("WET");
 
   const todayWibKey = useMemo(() => formatWibDateKey(new Date()), []);
 
@@ -140,12 +141,11 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
     return () => window.clearInterval(id);
   }, [load, loadSimulators]);
 
-  const shown = useMemo(() => {
+  const daySlots = useMemo(() => {
     const openMin = 7 * 60 + 30;
     const closeMin = 15 * 60 + 45;
 
     return slots
-      .filter((s) => (leaseView === "ALL" ? true : s.leaseType === leaseView))
       .filter((s) => {
         const startMin = toWibMinutes(s.startAt);
         const endMin = toWibMinutes(s.endAt);
@@ -159,12 +159,36 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
         const sb = `${b.simulator.category} ${b.simulator.name}`;
         return sa.localeCompare(sb);
       });
-  }, [slots, leaseView]);
+  }, [slots]);
+
+  const wetSlots = useMemo(() => daySlots.filter((s) => s.leaseType === "WET"), [daySlots]);
+  const dryBlocks = useMemo(() => daySlots.filter((s) => s.leaseType === "DRY"), [daySlots]);
+
+  const shown = useMemo(() => {
+    if (leaseView === "WET") return wetSlots;
+    // DRY view: tetap tampilkan slot jadwal (ScheduleSlot) sebagai basis availability,
+    // lalu booking DRY akan menimpa status jadi BOOKED/LOCKED bila bentrok.
+    return daySlots;
+  }, [daySlots, dryBlocks, leaseView, wetSlots]);
 
   const timeBlocks = useMemo(() => {
-    const stepMin = 60;
     const blocks: { label: string; startMs: number; endMs: number }[] = [];
 
+    if (leaseView === "WET") {
+      const sessions = [WET_SESSIONS_WIB.MORNING, WET_SESSIONS_WIB.AFTERNOON];
+      for (const s of sessions) {
+        const startIso = new Date(`${dateKey}T${minutesToHm(s.startMin)}:00+07:00`).toISOString();
+        const endIso = new Date(`${dateKey}T${minutesToHm(s.endMin)}:00+07:00`).toISOString();
+        blocks.push({
+          label: `${minutesToHm(s.startMin)}-${minutesToHm(s.endMin)} ${s.label}`,
+          startMs: new Date(startIso).getTime(),
+          endMs: new Date(endIso).getTime(),
+        });
+      }
+      return blocks;
+    }
+
+    const stepMin = 60;
     const ranges = [
       { startMin: 7 * 60 + 30, endMin: 11 * 60 + 30 },
       { startMin: 11 * 60 + 45, endMin: 15 * 60 + 45 },
@@ -186,7 +210,7 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
     }
 
     return blocks;
-  }, [dateKey]);
+  }, [dateKey, leaseView]);
 
   const simulatorNamesByCategory = useMemo(() => {
     return {
@@ -203,6 +227,55 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
     };
 
     const m = new Map<string, Slot["status"]>();
+
+    // Special rule for WET view:
+    // - Render per sesi (2 blok)
+    // - Jika ada DRY booking overlap, maka sesi WET yang tadinya AVAILABLE menjadi LOCKED
+    //   (agar terlihat bentrok / tidak bisa dipakai barengan).
+    if (leaseView === "WET") {
+      const wetPresence = new Set<string>();
+
+      for (const s of wetSlots) {
+        const sStart = new Date(s.startAt).getTime();
+        const sEnd = new Date(s.endAt).getTime();
+        const cat = s.simulator.category;
+        const simName = s.simulator.name;
+        if (cat !== "BOEING" && cat !== "AIRBUS") continue;
+
+        for (let i = 0; i < timeBlocks.length; i++) {
+          const b = timeBlocks[i];
+          const overlaps = sStart < b.endMs && sEnd > b.startMs;
+          if (!overlaps) continue;
+          const key = `${cat}@@${simName}@@${i}`;
+          wetPresence.add(key);
+          const prev = m.get(key);
+          if (!prev || priority[s.status] > priority[prev]) m.set(key, s.status);
+        }
+      }
+
+      for (const d of dryBlocks) {
+        const dStart = new Date(d.startAt).getTime();
+        const dEnd = new Date(d.endAt).getTime();
+        const cat = d.simulator.category;
+        const simName = d.simulator.name;
+        if (cat !== "BOEING" && cat !== "AIRBUS") continue;
+
+        for (let i = 0; i < timeBlocks.length; i++) {
+          const b = timeBlocks[i];
+          const overlaps = dStart < b.endMs && dEnd > b.startMs;
+          if (!overlaps) continue;
+
+          const key = `${cat}@@${simName}@@${i}`;
+          if (!wetPresence.has(key)) continue; // kalau sesi belum dibuka, tetap abu-abu
+
+          const prev = m.get(key);
+          if (prev === "AVAILABLE") m.set(key, "LOCKED");
+        }
+      }
+
+      return m;
+    }
+
     for (const s of shown) {
       const sStart = new Date(s.startAt).getTime();
       const sEnd = new Date(s.endAt).getTime();
@@ -220,8 +293,9 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
         if (!prev || priority[s.status] > priority[prev]) m.set(key, s.status);
       }
     }
+
     return m;
-  }, [shown, timeBlocks]);
+  }, [dryBlocks, leaseView, shown, timeBlocks, wetSlots]);
 
   function TimeButton({ label, status }: { label: string; status: Slot["status"] | null }) {
     const cls =
@@ -270,7 +344,6 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
             onChange={(e) => setLeaseView(e.target.value as any)}
             className="h-9 w-[220px] rounded-lg border border-zinc-200 bg-white px-2 text-sm"
           >
-            <option value="ALL">Semua (WET + DRY)</option>
             <option value="WET">Wet Leased (per sesi)</option>
             <option value="DRY">Dry Leased (per jam)</option>
           </select>

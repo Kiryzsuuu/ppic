@@ -16,11 +16,20 @@ type Slot = {
 
 type ApiRes<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
 
+type UserLite = {
+  id: string;
+  username: string;
+  email?: string | null;
+  profile?: { fullName: string } | null;
+};
+
 export default function AdminSchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<string | null>(null);
   const [simulators, setSimulators] = useState<Simulator[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [users, setUsers] = useState<UserLite[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [simulatorId, setSimulatorId] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
@@ -34,6 +43,12 @@ export default function AdminSchedulePage() {
   const [editEndAt, setEditEndAt] = useState("");
   const [confirmDeleteSlotId, setConfirmDeleteSlotId] = useState<string | null>(null);
 
+  const [bookUserIdBySlot, setBookUserIdBySlot] = useState<Record<string, string>>({});
+  const [bookPersonCountBySlot, setBookPersonCountBySlot] = useState<Record<string, 1 | 2>>({});
+  const [bookTrainingCodeBySlot, setBookTrainingCodeBySlot] = useState<Record<string, "PPC" | "TYPE_RATING" | "OTHER">>({});
+  const [bookTrainingNameBySlot, setBookTrainingNameBySlot] = useState<Record<string, string>>({});
+  const [bookingSlotId, setBookingSlotId] = useState<string | null>(null);
+
   function mapApiMessage(msg: string) {
     if (msg.includes("startAt harus < endAt")) return "Waktu mulai harus lebih awal dari waktu selesai.";
     return msg;
@@ -46,6 +61,14 @@ export default function AdminSchedulePage() {
       setSimulators(json.data.simulators);
       if (!simulatorId && json.data.simulators.length > 0) setSimulatorId(json.data.simulators[0].id);
     }
+  }
+
+  async function loadUsers() {
+    setUsersLoading(true);
+    const res = await fetch("/api/admin/users?take=500");
+    const json = (await res.json().catch(() => null)) as ApiRes<{ users: UserLite[] }> | null;
+    if (res.ok && json?.ok) setUsers(json.data.users);
+    setUsersLoading(false);
   }
 
   async function loadSlots(simId?: string) {
@@ -63,6 +86,7 @@ export default function AdminSchedulePage() {
 
   useEffect(() => {
     loadSimulators();
+    loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -260,6 +284,42 @@ export default function AdminSchedulePage() {
     setLoading(false);
   }
 
+  async function bookSlot(slot: Slot) {
+    const userId = bookUserIdBySlot[slot.id] ?? "";
+    const personCount = bookPersonCountBySlot[slot.id] ?? 1;
+    const trainingCode = bookTrainingCodeBySlot[slot.id] ?? "PPC";
+    const trainingName = (bookTrainingNameBySlot[slot.id] ?? "").trim();
+
+    if (!userId) {
+      setError("Pilih user terlebih dahulu.");
+      return;
+    }
+    if (!trainingName) {
+      setError("Training Name wajib diisi.");
+      return;
+    }
+
+    setBookingSlotId(slot.id);
+    setError(null);
+    setBulkResult(null);
+
+    const res = await fetch(`/api/admin/slots/${encodeURIComponent(slot.id)}/book`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId, personCount, trainingCode, trainingName }),
+    });
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setError(mapApiMessage(json?.error?.message ?? "Gagal booking slot"));
+      setBookingSlotId(null);
+      return;
+    }
+
+    await loadSlots();
+    setBookingSlotId(null);
+  }
+
   return (
     <div className="grid gap-6">
       <SchedulePreview authed={true} />
@@ -384,6 +444,25 @@ export default function AdminSchedulePage() {
                   >
                     Edit Jadwal
                   </button>
+
+                  {s.status === "AVAILABLE" && !s.booking ? (
+                    <button
+                      disabled={loading || usersLoading}
+                      onClick={() => {
+                        setError(null);
+                        setBulkResult(null);
+                        const defaultUserId = users[0]?.id ?? "";
+                        setBookUserIdBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? defaultUserId }));
+                        setBookPersonCountBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? 1 }));
+                        setBookTrainingCodeBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? "PPC" }));
+                        setBookTrainingNameBySlot((prev) => ({ ...prev, [s.id]: prev[s.id] ?? "Pilot Proficiency Training (PPC)" }));
+                      }}
+                      className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800 disabled:opacity-60"
+                    >
+                      Bookingkan Slot
+                    </button>
+                  ) : null}
+
                   {s.status === "BOOKED" && s.booking ? (
                     <button
                       disabled={loading}
@@ -426,6 +505,83 @@ export default function AdminSchedulePage() {
                     )
                   ) : null}
                 </div>
+
+                {s.status === "AVAILABLE" && !s.booking && (bookUserIdBySlot[s.id] !== undefined || bookTrainingNameBySlot[s.id] !== undefined) ? (
+                  <div className="mt-3 grid gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 md:grid-cols-4 md:items-end">
+                    <label className="grid gap-1 text-sm md:col-span-2">
+                      <span className="font-medium">User</span>
+                      <select
+                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                        value={bookUserIdBySlot[s.id] ?? ""}
+                        onChange={(e) => setBookUserIdBySlot((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                      >
+                        <option value="" disabled>
+                          Pilih user
+                        </option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.profile?.fullName ? `${u.profile.fullName} — ` : ""}{u.username}{u.email ? ` (${u.email})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="grid gap-1 text-sm">
+                      <span className="font-medium">Person</span>
+                      <select
+                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                        value={bookPersonCountBySlot[s.id] ?? 1}
+                        onChange={(e) => setBookPersonCountBySlot((prev) => ({ ...prev, [s.id]: (Number(e.target.value) as 1 | 2) }))}
+                      >
+                        <option value={1}>1</option>
+                        <option value={2}>2</option>
+                      </select>
+                    </label>
+
+                    <label className="grid gap-1 text-sm">
+                      <span className="font-medium">Training</span>
+                      <select
+                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                        value={bookTrainingCodeBySlot[s.id] ?? "PPC"}
+                        onChange={(e) => {
+                          const v = e.target.value as "PPC" | "TYPE_RATING" | "OTHER";
+                          setBookTrainingCodeBySlot((prev) => ({ ...prev, [s.id]: v }));
+                          setBookTrainingNameBySlot((prev) => ({
+                            ...prev,
+                            [s.id]: v === "PPC" ? "Pilot Proficiency Training (PPC)" : v === "TYPE_RATING" ? "Initial Type Rating" : (prev[s.id] ?? "Other"),
+                          }));
+                        }}
+                      >
+                        <option value="PPC">PPC</option>
+                        <option value="TYPE_RATING">Type Rating</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </label>
+
+                    <label className="grid gap-1 text-sm md:col-span-3">
+                      <span className="font-medium">Training Name</span>
+                      <input
+                        className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+                        value={bookTrainingNameBySlot[s.id] ?? ""}
+                        onChange={(e) => setBookTrainingNameBySlot((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                      />
+                    </label>
+
+                    <div className="flex items-center gap-2 md:col-span-1">
+                      <button
+                        disabled={loading || usersLoading || bookingSlotId === s.id}
+                        onClick={() => void bookSlot(s)}
+                        className="h-10 w-full rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+                      >
+                        {bookingSlotId === s.id ? "Memproses..." : "Booking"}
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-zinc-500 md:col-span-4">
+                      Catatan: booking ini langsung mengunci slot (status CONFIRMED + slot BOOKED).
+                    </div>
+                  </div>
+                ) : null}
 
                 {editingId === s.id ? (
                   <div className="mt-3 grid gap-3 md:grid-cols-3 md:items-end">

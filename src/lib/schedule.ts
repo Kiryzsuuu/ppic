@@ -32,3 +32,9 @@ export function getWetSessionKeyForRange(startAt: Date, endAt: Date): WetSession
   if (s === WET_SESSIONS_WIB.AFTERNOON.startMin && e === WET_SESSIONS_WIB.AFTERNOON.endMin) return "AFTERNOON";
   return null;
 }
+
+export function isWetFullDayRange(startAt: Date, endAt: Date): boolean {
+  const s = toWibMinutes(startAt);
+  const e = toWibMinutes(endAt);
+  return s === WET_SESSIONS_WIB.MORNING.startMin && e === WET_SESSIONS_WIB.AFTERNOON.endMin;
+}

@@ -391,9 +391,14 @@ model Certificate {
   id           String   @id @default(cuid()) @map("_id")
   bookingId    String   @unique
   qrValue      String   @unique
+
+  // Editable certificate payload (e.g. recipientName, licenseNo, notes, etc.)
+  data         Json?
+
   issuedById   String
   issuedBy     User     @relation("CertificateIssuedBy", fields: [issuedById], references: [id])
   issuedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id])
 }

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const freed = await tx.scheduleSlot.update({
       where: { id: slot.id },
-      data: { status: "AVAILABLE", bookingId: null },
+      data: { status: "AVAILABLE", booking: { disconnect: true } },
       select: { id: true, status: true },
     });
 

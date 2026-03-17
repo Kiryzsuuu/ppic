@@ -166,10 +166,10 @@ export default function StaffBookingForm(props: { users: UserLite[]; simulators:
       ) : null}
 
       <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-6 md:items-end">
-        <label className="grid gap-1 text-sm md:col-span-2">
+        <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
           <span className="font-medium">User</span>
           <select
-            className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+            className="h-10 w-full min-w-0 truncate rounded-lg border border-zinc-200 bg-white px-3"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
             disabled={loading}
@@ -187,10 +187,10 @@ export default function StaffBookingForm(props: { users: UserLite[]; simulators:
           </select>
         </label>
 
-        <label className="grid gap-1 text-sm md:col-span-2">
+        <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
           <span className="font-medium">Simulator</span>
           <select
-            className="h-10 rounded-lg border border-zinc-200 px-3"
+            className="h-10 w-full min-w-0 truncate rounded-lg border border-zinc-200 px-3"
             value={simulatorId}
             onChange={(e) => setSimulatorId(e.target.value)}
             disabled={loading}
@@ -203,10 +203,10 @@ export default function StaffBookingForm(props: { users: UserLite[]; simulators:
           </select>
         </label>
 
-        <label className="grid gap-1 text-sm md:col-span-2">
+        <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
           <span className="font-medium">Leased Type</span>
           <select
-            className="h-10 rounded-lg border border-zinc-200 px-3"
+            className="h-10 w-full min-w-0 truncate rounded-lg border border-zinc-200 px-3"
             value={leaseType}
             onChange={(e) => setLeaseType(e.target.value as "WET" | "DRY")}
             disabled={loading}
@@ -313,7 +313,7 @@ export default function StaffBookingForm(props: { users: UserLite[]; simulators:
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm">
+            <label className="grid gap-1 text-sm md:col-span-2">
               <span className="font-medium">Mulai</span>
               <select
                 className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
@@ -329,7 +329,7 @@ export default function StaffBookingForm(props: { users: UserLite[]; simulators:
               </select>
             </label>
 
-            <label className="grid gap-1 text-sm">
+            <label className="grid gap-1 text-sm md:col-span-2">
               <span className="font-medium">Selesai</span>
               <select
                 className="h-10 rounded-lg border border-zinc-200 bg-white px-3"

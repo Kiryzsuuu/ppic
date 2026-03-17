@@ -429,7 +429,7 @@ export default function AdminSchedulePage() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 grid gap-4">
+      <section id="staff-booking" className="rounded-2xl border border-zinc-200 bg-white p-6 grid gap-4">
         <div className="text-sm font-semibold">Booking untuk User</div>
 
         {staffResult ? (
@@ -439,10 +439,10 @@ export default function AdminSchedulePage() {
         ) : null}
 
         <form onSubmit={staffBook} className="grid gap-3 md:grid-cols-6 md:items-end">
-          <label className="grid gap-1 text-sm md:col-span-2">
+          <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
             <span className="font-medium">User</span>
             <select
-              className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
+              className="h-10 w-full min-w-0 truncate rounded-lg border border-zinc-200 bg-white px-3"
               value={staffUserId}
               onChange={(e) => setStaffUserId(e.target.value)}
               disabled={usersLoading || staffBooking}
@@ -460,10 +460,10 @@ export default function AdminSchedulePage() {
             </select>
           </label>
 
-          <label className="grid gap-1 text-sm md:col-span-2">
+          <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
             <span className="font-medium">Simulator</span>
             <select
-              className="h-10 rounded-lg border border-zinc-200 px-3"
+              className="h-10 w-full min-w-0 truncate rounded-lg border border-zinc-200 px-3"
               value={simulatorId}
               onChange={(e) => setSimulatorId(e.target.value)}
               disabled={staffBooking}
@@ -476,10 +476,10 @@ export default function AdminSchedulePage() {
             </select>
           </label>
 
-          <label className="grid gap-1 text-sm md:col-span-2">
+          <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
             <span className="font-medium">Leased Type</span>
             <select
-              className="h-10 rounded-lg border border-zinc-200 px-3"
+              className="h-10 w-full min-w-0 truncate rounded-lg border border-zinc-200 px-3"
               value={staffLeaseType}
               onChange={(e) => setStaffLeaseType(e.target.value as "WET" | "DRY")}
               disabled={staffBooking}
@@ -586,7 +586,7 @@ export default function AdminSchedulePage() {
                 </select>
               </label>
 
-              <label className="grid gap-1 text-sm">
+              <label className="grid gap-1 text-sm md:col-span-2">
                 <span className="font-medium">Mulai</span>
                 <select
                   className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
@@ -602,7 +602,7 @@ export default function AdminSchedulePage() {
                 </select>
               </label>
 
-              <label className="grid gap-1 text-sm">
+              <label className="grid gap-1 text-sm md:col-span-2">
                 <span className="font-medium">Selesai</span>
                 <select
                   className="h-10 rounded-lg border border-zinc-200 bg-white px-3"
@@ -631,7 +631,7 @@ export default function AdminSchedulePage() {
         </form>
 
         <div className="text-xs text-zinc-500">
-          Catatan: booking staff akan langsung membuat booking status CONFIRMED. Untuk WET, slot sesi harus sudah dibuat (AVAILABLE) oleh admin.
+          Catatan: booking staff akan langsung membuat booking status CONFIRMED. Untuk WET, idealnya slot sesi (Morning/Afternoon) sudah tersedia (AVAILABLE). Jika yang tersedia slot full-day 07:30–15:45, sistem akan otomatis memecah menjadi sesi saat booking.
         </div>
       </section>
 
@@ -713,7 +713,9 @@ export default function AdminSchedulePage() {
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6">
-        <div className="text-sm font-semibold">Daftar Slot</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm font-semibold">Daftar Slot</div>
+        </div>
         <div className="mt-4 grid gap-2">
           {slots.length === 0 ? (
             <div className="text-sm text-zinc-600">Belum ada slot.</div>
@@ -744,9 +746,15 @@ export default function AdminSchedulePage() {
                   ) : null}
 
                   {s.status === "AVAILABLE" && !s.booking && !sessionKey ? (
-                    <div className="mt-2 text-xs text-amber-700">
-                      Slot ini bukan sesi WET. Silakan edit agar sesuai sesi (Morning/Afternoon).
-                    </div>
+                    isFullDayWetRange ? (
+                      <div className="mt-2 text-xs text-zinc-600">
+                        Slot ini full-day (07:30–15:45). Saat booking WET via <a href="#staff-booking" className="underline">form di atas</a>, sistem akan otomatis memecah menjadi sesi Morning/Afternoon.
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-amber-700">
+                        Slot ini bukan sesi WET (Morning/Afternoon). Jika mau dipakai untuk WET, silakan edit jam slot agar sesuai sesi.
+                      </div>
+                    )
                   ) : null}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">

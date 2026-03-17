@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
-import { getWetSessionKeyForRange } from "@/lib/schedule";
+import { WET_SESSIONS_WIB, getWetSessionKeyForRange, isWetFullDayRange } from "@/lib/schedule";
 
 const BulkCreateSchema = z.object({
   simulatorId: z.string().min(1),
@@ -32,6 +32,12 @@ function endOfMonthWib(d: Date) {
   return new Date(Date.UTC(y, m + 1, 0, 16, 59, 59, 999));
 }
 
+function buildWibDateTime(dateKey: string, min: number) {
+  const hh = String(Math.floor(min / 60)).padStart(2, "0");
+  const mm = String(min % 60).padStart(2, "0");
+  return new Date(`${dateKey}T${hh}:${mm}:00+07:00`);
+}
+
 export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(["ADMIN"]);
   if (!session) return response;
@@ -44,9 +50,12 @@ export async function POST(req: NextRequest) {
     const endAt0 = new Date(input.endAt);
     if (!(startAt0 < endAt0)) return jsonError("Waktu mulai harus lebih awal dari waktu selesai.", 400);
 
-    if (!getWetSessionKeyForRange(startAt0, endAt0)) {
+    const isSession = Boolean(getWetSessionKeyForRange(startAt0, endAt0));
+    const isFullDay = isWetFullDayRange(startAt0, endAt0);
+
+    if (!isSession && !isFullDay) {
       return jsonError(
-        "Slot harus sesuai sesi WET (07:30–11:30 atau 11:45–15:45 WIB). Untuk membuat 2 sesi per hari, jalankan bulk 2x.",
+        "Slot harus sesuai sesi WET (07:30–11:30 atau 11:45–15:45 WIB) atau full-day WET (07:30–15:45 WIB).",
         400,
       );
     }
@@ -74,42 +83,56 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < MAX_OCCURRENCES; i++) {
       if (startAt.getTime() > untilExclusive.getTime()) break;
 
-      const dryConflict = await prisma.booking.findFirst({
-        where: {
-          simulatorId: input.simulatorId,
-          leaseType: "DRY",
-          status: { in: ["CONFIRMED", "COMPLETED"] },
-          requestedStartAt: { not: null, lt: endAt },
-          requestedEndAt: { not: null, gt: startAt },
-        },
-        select: { id: true },
-      });
+      const occurrenceDateKey = startAt.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+      const sessionsToCreate = isFullDay
+        ? [
+            {
+              startAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.MORNING.startMin),
+              endAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.MORNING.endMin),
+            },
+            {
+              startAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.AFTERNOON.startMin),
+              endAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.AFTERNOON.endMin),
+            },
+          ]
+        : [{ startAt, endAt }];
 
-      if (dryConflict) {
-        skippedConflict++;
-        const stepUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" = input.repeatUnit === "MONTH" ? "DAY" : input.repeatUnit;
-        startAt = addInterval(startAt, stepUnit, input.repeatEvery);
-        endAt = addInterval(endAt, stepUnit, input.repeatEvery);
-        continue;
-      }
+      for (const ses of sessionsToCreate) {
+        const dryConflict = await prisma.booking.findFirst({
+          where: {
+            simulatorId: input.simulatorId,
+            leaseType: "DRY",
+            status: { in: ["CONFIRMED", "COMPLETED"] },
+            requestedStartAt: { not: null, lt: ses.endAt },
+            requestedEndAt: { not: null, gt: ses.startAt },
+          },
+          select: { id: true },
+        });
 
-      const conflict = await prisma.scheduleSlot.findFirst({
-        where: {
-          simulatorId: input.simulatorId,
-          startAt: { lt: endAt },
-          endAt: { gt: startAt },
-        },
-        select: { id: true },
-      });
+        if (dryConflict) {
+          skippedConflict++;
+          continue;
+        }
 
-      if (conflict) {
-        skippedConflict++;
-      } else {
+        const conflict = await prisma.scheduleSlot.findFirst({
+          where: {
+            simulatorId: input.simulatorId,
+            startAt: { lt: ses.endAt },
+            endAt: { gt: ses.startAt },
+          },
+          select: { id: true },
+        });
+
+        if (conflict) {
+          skippedConflict++;
+          continue;
+        }
+
         await prisma.scheduleSlot.create({
           data: {
             simulatorId: input.simulatorId,
-            startAt,
-            endAt,
+            startAt: ses.startAt,
+            endAt: ses.endAt,
             status: "AVAILABLE",
             createdByAdminId: session.userId,
           },

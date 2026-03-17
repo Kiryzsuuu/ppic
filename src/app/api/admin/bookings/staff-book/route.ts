@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
@@ -95,63 +95,225 @@ export async function POST(req: NextRequest) {
       const startAt = buildWibDateTime(input.dateKey, sessionDef.startMin);
       const endAt = buildWibDateTime(input.dateKey, sessionDef.endMin);
 
-      const slot = await prisma.scheduleSlot.findFirst({
+      // Block WET session if overlapping with confirmed DRY bookings.
+      const dryConflictForRequestedSession = await prisma.booking.findFirst({
         where: {
           simulatorId: input.simulatorId,
-          startAt,
-          endAt,
-          status: "AVAILABLE",
-          bookingId: null,
-        },
-        select: { id: true, simulatorId: true, startAt: true, endAt: true },
-      });
-
-      if (!slot) {
-        return jsonError(
-          "Slot sesi WET belum tersedia/AVAILABLE untuk tanggal tersebut. Buat slot sesi dulu di Admin Jadwal.",
-          409,
-        );
-      }
-
-      const dryConflict = await prisma.booking.findFirst({
-        where: {
-          simulatorId: slot.simulatorId,
           leaseType: "DRY",
           status: { in: ["CONFIRMED", "COMPLETED"] },
-          requestedStartAt: { not: null, lt: slot.endAt },
-          requestedEndAt: { not: null, gt: slot.startAt },
+          requestedStartAt: { not: null, lt: endAt },
+          requestedEndAt: { not: null, gt: startAt },
         },
         select: { id: true },
       });
-      if (dryConflict) return jsonError("Slot sesi bentrok dengan booking Dry Leased yang sudah terkonfirmasi", 409);
+      if (dryConflictForRequestedSession) {
+        return jsonError("Slot sesi bentrok dengan booking Dry Leased yang sudah terkonfirmasi", 409);
+      }
 
       const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const booking = await tx.booking.create({
-          data: {
-            userId: user.id,
-            simulatorId: slot.simulatorId,
-            leaseType: "WET",
-            trainingCode: input.trainingCode,
-            trainingName: input.trainingName,
-            personCount: input.personCount,
-            paymentMethod: "QRIS",
-            preferredSlotId: slot.id,
-            requestedStartAt: slot.startAt,
-            requestedEndAt: slot.endAt,
-            status: "CONFIRMED",
-            confirmedAt: new Date(),
-          },
-          select: { id: true, userId: true },
-        });
+          // Prefer exact session slot. If not present, try auto-splitting an AVAILABLE full-day slot.
+          let slot = await tx.scheduleSlot.findFirst({
+            where: {
+              simulatorId: input.simulatorId,
+              startAt,
+              endAt,
+              status: "AVAILABLE",
+              booking: { is: null },
+            },
+            select: { id: true, simulatorId: true, startAt: true, endAt: true },
+          });
 
-        const updatedSlot = await tx.scheduleSlot.update({
-          where: { id: slot.id },
-          data: { status: "BOOKED", bookingId: booking.id },
-          select: { id: true, status: true, bookingId: true },
-        });
+          if (!slot) {
+            const morningStartAt = buildWibDateTime(input.dateKey, WET_SESSIONS_WIB.MORNING.startMin);
+            const morningEndAt = buildWibDateTime(input.dateKey, WET_SESSIONS_WIB.MORNING.endMin);
+            const afternoonStartAt = buildWibDateTime(input.dateKey, WET_SESSIONS_WIB.AFTERNOON.startMin);
+            const afternoonEndAt = buildWibDateTime(input.dateKey, WET_SESSIONS_WIB.AFTERNOON.endMin);
 
-        return { booking, slot: updatedSlot };
-      });
+            const [existingMorning, existingAfternoon] = await Promise.all([
+              tx.scheduleSlot.findFirst({
+                where: { simulatorId: input.simulatorId, startAt: morningStartAt, endAt: morningEndAt },
+                select: {
+                  id: true,
+                  simulatorId: true,
+                  startAt: true,
+                  endAt: true,
+                  status: true,
+                  bookingId: true,
+                  createdByAdminId: true,
+                },
+              }),
+              tx.scheduleSlot.findFirst({
+                where: { simulatorId: input.simulatorId, startAt: afternoonStartAt, endAt: afternoonEndAt },
+                select: {
+                  id: true,
+                  simulatorId: true,
+                  startAt: true,
+                  endAt: true,
+                  status: true,
+                  bookingId: true,
+                  createdByAdminId: true,
+                },
+              }),
+            ]);
+
+            const requestedExisting = input.sessionKey === "MORNING" ? existingMorning : existingAfternoon;
+            if (requestedExisting) {
+              if (requestedExisting.status === "AVAILABLE" && !requestedExisting.bookingId) {
+                slot = {
+                  id: requestedExisting.id,
+                  simulatorId: requestedExisting.simulatorId,
+                  startAt: requestedExisting.startAt,
+                  endAt: requestedExisting.endAt,
+                };
+              } else {
+                throw new Error(
+                  `Slot WET sesi ${input.sessionKey} sudah ada tetapi tidak AVAILABLE (status=${requestedExisting.status}). Cek Daftar Slot untuk tanggal tersebut.`,
+                );
+              }
+            } else {
+              const fullDayStartAt = buildWibDateTime(input.dateKey, WET_SESSIONS_WIB.MORNING.startMin);
+              const fullDayEndAt = buildWibDateTime(input.dateKey, WET_SESSIONS_WIB.AFTERNOON.endMin);
+
+              const fullDaySlot = await tx.scheduleSlot.findFirst({
+                where: {
+                  simulatorId: input.simulatorId,
+                  // Legacy data may have a single slot that spans the whole operational day.
+                  // Use a coverage check rather than strict equality to ensure we can auto-split.
+                  startAt: { lte: fullDayStartAt },
+                  endAt: { gte: fullDayEndAt },
+                  status: "AVAILABLE",
+                  booking: { is: null },
+                },
+                select: { id: true, createdByAdminId: true },
+              });
+
+              if (fullDaySlot) {
+                // Split/convert full-day slot into the requested session.
+                slot = await tx.scheduleSlot.update({
+                  where: { id: fullDaySlot.id },
+                  data:
+                    input.sessionKey === "MORNING"
+                      ? { startAt: morningStartAt, endAt: morningEndAt }
+                      : { startAt: afternoonStartAt, endAt: afternoonEndAt },
+                  select: { id: true, simulatorId: true, startAt: true, endAt: true },
+                });
+
+                // Ensure the other session exists (AVAILABLE) if missing.
+                if (input.sessionKey === "MORNING" && !existingAfternoon) {
+                  await tx.scheduleSlot.create({
+                    data: {
+                      simulatorId: input.simulatorId,
+                      startAt: afternoonStartAt,
+                      endAt: afternoonEndAt,
+                      status: "AVAILABLE",
+                      createdByAdminId: fullDaySlot.createdByAdminId,
+                    },
+                    select: { id: true },
+                  });
+                }
+                if (input.sessionKey === "AFTERNOON" && !existingMorning) {
+                  await tx.scheduleSlot.create({
+                    data: {
+                      simulatorId: input.simulatorId,
+                      startAt: morningStartAt,
+                      endAt: morningEndAt,
+                      status: "AVAILABLE",
+                      createdByAdminId: fullDaySlot.createdByAdminId,
+                    },
+                    select: { id: true },
+                  });
+                }
+              } else {
+                // Full-day slot may already have been converted into one session; create the missing session from existing adminId.
+                const createdByAdminId = existingMorning?.createdByAdminId ?? existingAfternoon?.createdByAdminId;
+                if (createdByAdminId) {
+                  slot = await tx.scheduleSlot.create({
+                    data: {
+                      simulatorId: input.simulatorId,
+                      startAt,
+                      endAt,
+                      status: "AVAILABLE",
+                      createdByAdminId,
+                    },
+                    select: { id: true, simulatorId: true, startAt: true, endAt: true },
+                  });
+                }
+
+                // Legacy/dirty data: an AVAILABLE slot may exist that fully covers the requested session,
+                // but its stored start/end are not exactly equal to the session boundaries.
+                // Normalize it to the exact session range so downstream logic stays consistent.
+                if (!slot) {
+                  const coveringSlot = await tx.scheduleSlot.findFirst({
+                    where: {
+                      simulatorId: input.simulatorId,
+                      status: "AVAILABLE",
+                      booking: { is: null },
+                      startAt: { lte: startAt },
+                      endAt: { gte: endAt },
+                    },
+                    orderBy: [{ startAt: "desc" }, { endAt: "asc" }],
+                    select: { id: true },
+                  });
+
+                  if (coveringSlot) {
+                    const otherOverlap = await tx.scheduleSlot.findFirst({
+                      where: {
+                        simulatorId: input.simulatorId,
+                        id: { not: coveringSlot.id },
+                        startAt: { lt: endAt },
+                        endAt: { gt: startAt },
+                      },
+                      select: { id: true, status: true },
+                    });
+                    if (otherOverlap) {
+                      throw new Error(
+                        `Sesi WET ${input.sessionKey} bentrok dengan slot lain (slotId=${otherOverlap.id}, status=${otherOverlap.status}). Cek Daftar Slot untuk tanggal tersebut.`,
+                      );
+                    }
+
+                    slot = await tx.scheduleSlot.update({
+                      where: { id: coveringSlot.id },
+                      data: { startAt, endAt },
+                      select: { id: true, simulatorId: true, startAt: true, endAt: true },
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          if (!slot) {
+            throw new Error(
+              "Slot WET belum tersedia/AVAILABLE untuk tanggal tersebut. Untuk WET, sistem butuh slot availability: buat slot sesi (07:30–11:30 / 11:45–15:45) ATAU buat slot full-day (07:30–15:45) agar sistem bisa auto-split.",
+            );
+          }
+
+          const booking = await tx.booking.create({
+            data: {
+              userId: user.id,
+              simulatorId: slot.simulatorId,
+              leaseType: "WET",
+              trainingCode: input.trainingCode,
+              trainingName: input.trainingName,
+              personCount: input.personCount,
+              paymentMethod: "QRIS",
+              preferredSlotId: slot.id,
+              requestedStartAt: slot.startAt,
+              requestedEndAt: slot.endAt,
+              status: "CONFIRMED",
+              confirmedAt: new Date(),
+            },
+            select: { id: true, userId: true },
+          });
+
+          const updatedSlot = await tx.scheduleSlot.update({
+            where: { id: slot.id },
+            data: { status: "BOOKED", bookingId: booking.id },
+            select: { id: true, status: true, bookingId: true },
+          });
+
+          return { booking, slot: updatedSlot };
+        });
 
       try {
         await writeAuditLog({
@@ -167,7 +329,7 @@ export async function POST(req: NextRequest) {
             simulatorId: input.simulatorId,
             dateKey: input.dateKey,
             sessionKey: input.sessionKey,
-            slotId: slot.id,
+            slotId: created.slot.id,
           },
         });
       } catch {
@@ -180,7 +342,7 @@ export async function POST(req: NextRequest) {
           kind: "SCHEDULE",
           title: "Jadwal ditetapkan oleh admin",
           body: "Admin telah menetapkan jadwal simulator untuk Anda.",
-          metadata: { bookingId: created.booking.id, slotId: slot.id },
+          metadata: { bookingId: created.booking.id, slotId: created.slot.id },
         });
       } catch {
         // ignore
@@ -276,6 +438,28 @@ export async function POST(req: NextRequest) {
     return jsonOk({ booking: created });
   } catch (e) {
     if (e instanceof z.ZodError) return jsonError("Input tidak valid", 400, e.flatten());
-    return jsonError("Server error", 500);
+    if (
+      e instanceof Error &&
+      (e.message.includes("Slot sesi WET belum tersedia") ||
+        e.message.includes("Slot WET belum tersedia") ||
+        e.message.includes("Slot WET sesi") ||
+        e.message.includes("Sesi WET"))
+    ) {
+      return jsonError(e.message, 409);
+    }
+
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      // Common concurrency / constraint errors when splitting full-day slots.
+      if (e.code === "P2002") {
+        return jsonError("Slot sesi sudah ada / bentrok. Refresh data slot lalu coba booking lagi.", 409);
+      }
+      if (e.code === "P2025") {
+        return jsonError("Slot availability berubah (tidak ditemukan saat update). Refresh lalu coba lagi.", 409);
+      }
+    }
+
+    const msg =
+      process.env.NODE_ENV === "production" ? "Server error" : e instanceof Error ? e.message : "Server error";
+    return jsonError(msg, 500);
   }
 }

@@ -18,6 +18,7 @@
     "db:find-simulators": "tsx scripts/find-simulators.ts",
     "db:inspect-simulator": "tsx scripts/inspect-simulator-day.ts",
     "db:split-wet-sessions": "tsx scripts/split-long-slots-into-sessions.ts",
+    "db:dummy-certificate": "tsx scripts/run-dummy-certificate.ts",
     "db:create-test-dry": "tsx scripts/create-test-dry-booking.ts",
     "db:fix-mongo-indexes": "tsx scripts/fix-mongo-sparse-unique-indexes.ts",
     "db:migrate:sqlite-to-mongo": "tsx scripts/migrate-sqlite-to-mongo.ts"

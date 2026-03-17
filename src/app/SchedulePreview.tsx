@@ -149,7 +149,9 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
       .filter((s) => {
         const startMin = toWibMinutes(s.startAt);
         const endMin = toWibMinutes(s.endAt);
-        return startMin >= openMin && endMin <= closeMin;
+        // Keep any slot intersecting operational hours.
+        // (We may later decide if a slot fully covers a WET session.)
+        return endMin > openMin && startMin < closeMin;
       })
       .slice()
       .sort((a, b) => {
@@ -244,8 +246,10 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
 
         for (let i = 0; i < timeBlocks.length; i++) {
           const b = timeBlocks[i];
-          const overlaps = sStart < b.endMs && sEnd > b.startMs;
-          if (!overlaps) continue;
+          // For WET session blocks, show availability only if a slot fully covers the session.
+          // This avoids rendering a session as AVAILABLE when there is only a partial overlap.
+          const covers = sStart <= b.startMs && sEnd >= b.endMs;
+          if (!covers) continue;
           const key = `${cat}@@${simName}@@${i}`;
           wetPresence.add(key);
           const prev = m.get(key);
@@ -285,8 +289,8 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
 
       for (let i = 0; i < timeBlocks.length; i++) {
         const b = timeBlocks[i];
-        const overlaps = sStart < b.endMs && sEnd > b.startMs;
-        if (!overlaps) continue;
+        const covers = sStart <= b.startMs && sEnd >= b.endMs;
+        if (!covers) continue;
 
         const key = `${cat}@@${simName}@@${i}`;
         const prev = m.get(key);

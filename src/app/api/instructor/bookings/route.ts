@@ -12,7 +12,12 @@ export async function GET() {
       status: "CONFIRMED",
       slot: { isNot: null },
     },
-    include: { user: { select: { username: true } }, simulator: true, slot: true },
+    include: {
+      user: { include: { profile: { select: { fullName: true, licenseNo: true } } } },
+      simulator: true,
+      slot: true,
+      certificate: { select: { id: true } },
+    },
     orderBy: { requestedAt: "desc" },
     take: 100,
   });

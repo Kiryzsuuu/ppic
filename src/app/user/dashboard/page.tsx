@@ -40,6 +40,16 @@ export default async function UserDashboard() {
     take: 10,
   });
 
+  const certificates = await prisma.certificate.findMany({
+    where: { booking: { userId: session.userId } },
+    include: {
+      booking: { include: { simulator: true, slot: true } },
+      issuedBy: { select: { username: true, role: true } },
+    },
+    orderBy: { issuedAt: "desc" },
+    take: 10,
+  });
+
   return (
     <div className="grid gap-6">
       <div>
@@ -63,6 +73,39 @@ export default async function UserDashboard() {
       </section>
 
       <NotificationsWidget />
+
+      <section className="rounded-2xl border border-zinc-200 bg-white p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Sertifikat</div>
+            <div className="mt-1 text-sm text-zinc-600">Daftar sertifikat Anda yang diterbitkan oleh instructor/staff.</div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          {certificates.length === 0 ? (
+            <div className="text-sm text-zinc-600">Belum ada sertifikat.</div>
+          ) : (
+            certificates.map((c) => (
+              <a key={c.id} className="rounded-xl border border-zinc-200 p-4 hover:bg-zinc-50" href={`/user/certificates/${c.id}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-medium">{c.booking.simulator.category} {c.booking.simulator.name}</div>
+                  <div className="text-xs text-zinc-600">Diterbitkan: <span className="font-medium">{fmtDateTime(c.issuedAt)}</span></div>
+                </div>
+                <div className="mt-1 text-sm text-zinc-600">{c.booking.leaseType} • {c.booking.trainingName}</div>
+                <div className="mt-2 grid gap-1 text-xs text-zinc-600">
+                  <div>Issuer: {c.issuedBy.username} ({c.issuedBy.role})</div>
+                  <div>
+                    Jadwal: {c.booking.slot
+                      ? `${fmtDateTime(c.booking.slot.startAt)} - ${fmtDateTime(c.booking.slot.endAt)}`
+                      : "-"}
+                  </div>
+                </div>
+              </a>
+            ))
+          )}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6">
         <div className="text-sm font-semibold">Catatan Booking</div>

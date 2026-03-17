@@ -7,6 +7,14 @@ import { createNotification } from "@/lib/notifications";
 import { sendBookingCreatedEmail } from "@/lib/emails";
 import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
 
+function parseEmailList(value: string | undefined) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { session, response } = await requireRole(["USER"]);
   if (!session) return response;
@@ -26,9 +34,21 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!profile) return jsonError("Profil tidak ditemukan", 404);
 
   if (booking.leaseType === "WET") {
+    const bypassEmails = parseEmailList(process.env.DOCS_BYPASS_EMAILS);
+    const userEmailRow = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { email: true },
+    });
+    const normalizedEmail = (userEmailRow?.email ?? profile.email ?? "").trim().toLowerCase();
+
+    // Security note:
+    // Bypass is ALWAYS explicit and controlled by DOCS_BYPASS_EMAILS allowlist.
+    // This avoids accidentally allowing document-less submissions in production.
+    const isBypassUser = Boolean(normalizedEmail && bypassEmails.includes(normalizedEmail));
+
     const requiredTypes = ["LICENSE", "MEDICAL", "ID"] as const;
     const missing = requiredTypes.filter((t) => !profile.documents.some((d) => String(d.type) === t));
-    if (missing.length > 0) {
+    if (!isBypassUser && missing.length > 0) {
       return jsonError(`Dokumen wajib belum lengkap: ${missing.join(", ")}`, 400);
     }
   }

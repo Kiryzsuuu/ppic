@@ -134,14 +134,18 @@ async function ensureSystemUser(opts: {
     preferredEmailIsExplicit: opts.preferredEmailIsExplicit,
   });
 
+  // System users are meant for local/dev access; mark them as verified.
+  const emailVerifiedAt = new Date();
+
   const user = await prisma.user.upsert({
     where: { username: opts.username },
-    update: { role: opts.role, passwordHash: opts.passwordHash, email },
+    update: { role: opts.role, passwordHash: opts.passwordHash, email, emailVerifiedAt },
     create: {
       username: opts.username,
       email,
       passwordHash: opts.passwordHash,
       role: opts.role,
+      emailVerifiedAt,
     },
   });
 

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 
@@ -108,14 +108,21 @@ export async function GET(req: NextRequest) {
     "Pembayaran Tervalidasi": validatedSeries[i] ?? 0,
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Laporan");
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Laporan");
+  ws.columns = [
+    { header: "Tanggal", key: "Tanggal", width: 14 },
+    { header: "Registrasi User", key: "Registrasi User", width: 18 },
+    { header: "Booking Disubmit", key: "Booking Disubmit", width: 18 },
+    { header: "Bukti Pembayaran Disubmit", key: "Bukti Pembayaran Disubmit", width: 26 },
+    { header: "Pembayaran Tervalidasi", key: "Pembayaran Tervalidasi", width: 22 },
+  ];
+  for (const r of rows) ws.addRow(r);
 
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const buf = await wb.xlsx.writeBuffer();
   const stamp = `${fromKey}_to_${toKey}`;
 
-  return new Response(buf, {
+  return new Response(buf as ArrayBuffer, {
     headers: {
       "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "content-disposition": `attachment; filename="laporan_admin_${stamp}.xlsx"`,

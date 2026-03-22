@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify } from "jose/jwt/verify";
 
 const SESSION_COOKIE_NAME = "ppic_session";
 const DEVICE_COOKIE_NAME = "ppic_device_id";

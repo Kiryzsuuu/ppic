@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/rbac";
 import { verifyEmailOtp } from "@/lib/emailVerification";
 import { prisma } from "@/lib/prisma";
 import { signSession, setSessionCookie } from "@/lib/session";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 import { sendWelcomeEmail } from "@/lib/emails";
 
 const VerifySchema = z.object({
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
     try {
       await writeAuditLog({
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
         targetType: "User",
         targetId: session.userId,
         ip,
+        deviceId,
         userAgent,
       });
     } catch {

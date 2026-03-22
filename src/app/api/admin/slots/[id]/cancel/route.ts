@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
 import { createNotification } from "@/lib/notifications";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { session, response } = await requireRole(["ADMIN"]);
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (slot.status !== "BOOKED") return jsonError("Hanya slot BOOKED yang bisa dicancel", 400);
 
   const ip = getClientIpFromHeaders(req.headers);
+  const deviceId = getDeviceIdFromHeaders(req.headers);
   const userAgent = req.headers.get("user-agent");
 
   const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       targetType: "ScheduleSlot",
       targetId: slot.id,
       ip,
+      deviceId,
       userAgent,
       metadata: { bookingId: slot.bookingId, simulatorId: slot.simulatorId, startAt: slot.startAt, endAt: slot.endAt },
     });

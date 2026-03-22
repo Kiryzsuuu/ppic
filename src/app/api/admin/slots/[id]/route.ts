@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { session, response } = await requireRole(["ADMIN"]);
@@ -23,6 +23,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   await prisma.scheduleSlot.delete({ where: { id } });
 
   const ip = getClientIpFromHeaders(req.headers);
+  const deviceId = getDeviceIdFromHeaders(req.headers);
   const userAgent = req.headers.get("user-agent");
   try {
     await writeAuditLog({
@@ -32,6 +33,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       targetType: "ScheduleSlot",
       targetId: id,
       ip,
+      deviceId,
       userAgent,
     });
   } catch {

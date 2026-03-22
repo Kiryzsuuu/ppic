@@ -6,7 +6,7 @@ import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
 import { WET_SESSIONS_WIB, WetSessionKey } from "@/lib/schedule";
 import { createNotification } from "@/lib/notifications";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 function buildWibDateTime(dateKey: string, min: number) {
   const hh = String(Math.floor(min / 60)).padStart(2, "0");
@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
 
     const ip = getClientIpFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
+    const deviceId = getDeviceIdFromHeaders(req.headers);
 
     if (input.leaseType === "WET") {
       const sessionDef = WET_SESSIONS_WIB[input.sessionKey];
@@ -323,6 +324,7 @@ export async function POST(req: NextRequest) {
           targetType: "Booking",
           targetId: created.booking.id,
           ip,
+          deviceId,
           userAgent,
           metadata: {
             leaseType: "WET",
@@ -409,6 +411,7 @@ export async function POST(req: NextRequest) {
         targetType: "Booking",
         targetId: created.id,
         ip,
+        deviceId,
         userAgent,
         metadata: {
           leaseType: "DRY",

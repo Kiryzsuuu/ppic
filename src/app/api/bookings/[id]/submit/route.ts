@@ -5,7 +5,7 @@ import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
 import { createNotification } from "@/lib/notifications";
 import { sendBookingCreatedEmail } from "@/lib/emails";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 function parseEmailList(value: string | undefined) {
   if (!value) return [];
@@ -71,6 +71,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const simulatorLabel = bookingFull?.simulator ? `${bookingFull.simulator.category} ${bookingFull.simulator.name}` : "-";
 
   const ip = getClientIpFromHeaders(_req.headers);
+  const deviceId = getDeviceIdFromHeaders(_req.headers);
   const userAgent = _req.headers.get("user-agent");
   try {
     await writeAuditLog({
@@ -80,6 +81,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       targetType: "Booking",
       targetId: id,
       ip,
+      deviceId,
       userAgent,
     });
   } catch {

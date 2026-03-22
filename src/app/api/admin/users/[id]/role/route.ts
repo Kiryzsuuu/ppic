@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 const BodySchema = z.object({
   role: z.enum(["USER", "ADMIN", "FINANCE", "INSTRUCTOR"]),
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const updated = await prisma.user.update({ where: { id }, data: { role: input.role } });
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
     try {
       await writeAuditLog({
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         targetType: "User",
         targetId: id,
         ip,
+        deviceId,
         userAgent,
         metadata: { from: user.role, to: input.role },
       });

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { session, response } = await requireRole(["ADMIN"]);
@@ -15,6 +15,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!existing) return jsonError("User tidak ditemukan", 404);
 
   const ip = getClientIpFromHeaders(req.headers);
+  const deviceId = getDeviceIdFromHeaders(req.headers);
   const userAgent = req.headers.get("user-agent");
 
   try {
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         targetType: "User",
         targetId: id,
         ip,
+        deviceId,
         userAgent,
       });
     } catch {
@@ -94,6 +96,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         targetType: "User",
         targetId: id,
         ip,
+        deviceId,
         userAgent,
         metadata: {
           error: e instanceof Error ? e.message : String(e),

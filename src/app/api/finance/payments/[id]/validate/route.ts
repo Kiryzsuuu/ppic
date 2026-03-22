@@ -6,7 +6,7 @@ import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
 import { createNotification } from "@/lib/notifications";
 import { sendPaymentValidatedEmail } from "@/lib/emails";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 const ValidateSchema = z.object({
   approve: z.boolean(),
@@ -81,6 +81,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const fullName = bookingFull?.user.profile?.fullName ?? null;
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
     try {
       await writeAuditLog({
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         targetType: "Payment",
         targetId: updated.id,
         ip,
+        deviceId,
         userAgent,
         metadata: { bookingId: payment.bookingId },
       });

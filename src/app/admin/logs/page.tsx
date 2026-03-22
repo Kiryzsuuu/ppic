@@ -49,12 +49,13 @@ export default async function AdminLogsPage() {
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Target</th>
                 <th className="px-4 py-3">IP</th>
+                <th className="px-4 py-3">Device</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
               {logs.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-zinc-600" colSpan={6}>
+                  <td className="px-4 py-6 text-zinc-600" colSpan={7}>
                     Belum ada log.
                   </td>
                 </tr>
@@ -73,6 +74,12 @@ export default async function AdminLogsPage() {
                       <div className="text-xs text-zinc-600 break-all">{l.targetId ?? ""}</div>
                     </td>
                     <td className="px-4 py-3 text-zinc-700">{l.ip ?? "-"}</td>
+                    <td className="px-4 py-3 text-zinc-700">
+                      {typeof l.metadata === "object" && l.metadata && !Array.isArray(l.metadata)
+                        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          ((l.metadata as any).deviceId ?? "-")
+                        : "-"}
+                    </td>
                   </tr>
                 ))
               )}

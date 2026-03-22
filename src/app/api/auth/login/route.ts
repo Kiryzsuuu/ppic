@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { signSession, setSessionCookie } from "@/lib/session";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 const LoginSchema = z.object({
   identifier: z.string().min(1),
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     if (!ok) return jsonError("Username/Email atau password salah", 401);
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
 
     // Best-effort login tracking (do not block login if it fails)
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
         targetType: "User",
         targetId: user.id,
         ip,
+        deviceId,
         userAgent,
       });
     } catch {

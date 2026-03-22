@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { consumePasswordResetToken } from "@/lib/passwordReset";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 const PASSWORD_RESET_COOKIE_NAME = "ppic_pwreset";
 
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     });
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
     try {
       const u = await prisma.user.findUnique({ where: { id: consumed.userId }, select: { role: true } });
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
         targetType: "User",
         targetId: consumed.userId,
         ip,
+        deviceId,
         userAgent,
       });
     } catch {

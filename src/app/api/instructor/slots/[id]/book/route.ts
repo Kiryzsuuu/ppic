@@ -6,7 +6,7 @@ import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
 import { getWetSessionKeyForRange } from "@/lib/schedule";
 import { createNotification } from "@/lib/notifications";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 const BookSchema = z.object({
   userId: z.string().min(1),
@@ -66,6 +66,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (dryConflict) return jsonError("Slot sesi bentrok dengan booking Dry Leased yang sudah terkonfirmasi", 409);
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
 
     const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         targetType: "ScheduleSlot",
         targetId: slot.id,
         ip,
+        deviceId,
         userAgent,
         metadata: {
           bookingId: created.booking.id,

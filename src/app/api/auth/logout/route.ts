@@ -1,11 +1,12 @@
 import { jsonOk } from "@/lib/http";
 import { clearSessionCookie, getSessionFromCookies } from "@/lib/session";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
   if (session) {
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
     try {
       await writeAuditLog({
@@ -15,6 +16,7 @@ export async function POST(req: Request) {
         targetType: "User",
         targetId: session.userId,
         ip,
+        deviceId,
         userAgent,
       });
     } catch {

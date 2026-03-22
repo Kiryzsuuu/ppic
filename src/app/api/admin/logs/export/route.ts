@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     "targetType",
     "targetId",
     "ip",
+    "deviceId",
     "userAgent",
     "message",
     "metadata",
@@ -38,6 +39,11 @@ export async function GET(req: NextRequest) {
 
   const rows = logs.map((l) => {
     const meta = l.metadata ? JSON.stringify(l.metadata) : "";
+    const deviceId =
+      typeof l.metadata === "object" && l.metadata && !Array.isArray(l.metadata)
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          String((l.metadata as any).deviceId ?? "")
+        : "";
     return [
       csvCell(l.createdAt.toISOString()),
       csvCell(l.action),
@@ -47,6 +53,7 @@ export async function GET(req: NextRequest) {
       csvCell(l.targetType ?? ""),
       csvCell(l.targetId ?? ""),
       csvCell(l.ip ?? ""),
+      csvCell(deviceId),
       csvCell(l.userAgent ?? ""),
       csvCell(l.message ?? ""),
       csvCell(meta),

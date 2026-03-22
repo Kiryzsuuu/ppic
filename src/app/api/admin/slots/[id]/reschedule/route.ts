@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
 import { createNotification } from "@/lib/notifications";
-import { getClientIpFromHeaders, writeAuditLog } from "@/lib/audit";
+import { getClientIpFromHeaders, getDeviceIdFromHeaders, writeAuditLog } from "@/lib/audit";
 import { getWetSessionKeyForRange } from "@/lib/schedule";
 
 const BodySchema = z.object({
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (conflict) return jsonError("Slot bentrok dengan slot lain", 409);
 
     const ip = getClientIpFromHeaders(req.headers);
+    const deviceId = getDeviceIdFromHeaders(req.headers);
     const userAgent = req.headers.get("user-agent");
 
     const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -82,6 +83,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         targetType: "ScheduleSlot",
         targetId: slot.id,
         ip,
+        deviceId,
         userAgent,
         metadata: {
           bookingId: slot.bookingId,

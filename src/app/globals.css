@@ -43,6 +43,11 @@ body {
   isolation: isolate;
 }
 
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 body::before {
   content: "";
   position: fixed;
@@ -51,9 +56,9 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.18;
+  opacity: 0.35;
   pointer-events: none;
-  z-index: -1;
+  z-index: 0;
 }
 
 .print-only {

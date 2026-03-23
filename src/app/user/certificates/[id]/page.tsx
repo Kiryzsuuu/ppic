@@ -206,7 +206,7 @@ export default function UserCertificatePage() {
                 <div className="flex items-center gap-3">
                   <Image
                     alt="Logo PPIC"
-                    src="/logoppic/image%20(25).png"
+                    src="/logoppic/logoppic.7a5aa04c.png"
                     width={72}
                     height={56}
                     unoptimized

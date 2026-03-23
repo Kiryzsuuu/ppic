@@ -312,7 +312,7 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
     return (
       <div
         className={
-          "flex h-11 w-full items-center justify-center rounded-lg border text-sm font-medium transition " +
+          "flex h-11 w-full items-center justify-center rounded-none border text-sm font-medium transition " +
           cls
         }
         title={status ?? "BELUM_DIBUKA"}
@@ -324,39 +324,40 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
 
   return (
     <section className="border-t border-zinc-200 py-10 sm:py-12">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Jadwal Simulator</h2>
+      <div className="mt-4 overflow-hidden rounded-none border border-zinc-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow">
+        <div className="border-b border-white/10 bg-[#05164d] px-4 py-3 text-white">
+          <h2 className="text-base font-bold tracking-tight">Jadwal Simulator</h2>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-4 px-4 py-3">
+          <label className="grid gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Tanggal (WIB)</span>
+            <input
+              type="date"
+              value={dateKey}
+              onChange={(e) => setDateKey(e.target.value)}
+              className="h-9 w-[220px] rounded-none border border-zinc-200 bg-white px-2 text-sm transition-colors duration-200 focus:border-zinc-400 focus:outline-none"
+            />
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Tampilkan</span>
+            <select
+              value={leaseView}
+              onChange={(e) => setLeaseView(e.target.value as any)}
+              className="h-9 w-[220px] rounded-none border border-zinc-200 bg-white px-2 text-sm transition-colors duration-200 focus:border-zinc-400 focus:outline-none"
+            >
+              <option value="WET">Wet Leased (per sesi)</option>
+              <option value="DRY">Dry Leased (per jam)</option>
+            </select>
+          </label>
+
+          <div className="pb-1 text-xs font-medium text-zinc-500">Jam operasional: 07:30–15:45</div>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-end gap-3">
-        <label className="grid gap-1">
-          <span className="text-[11px] text-zinc-600">Tanggal (WIB)</span>
-          <input
-            type="date"
-            value={dateKey}
-            onChange={(e) => setDateKey(e.target.value)}
-            className="h-9 w-[220px] rounded-lg border border-zinc-200 bg-white px-2 text-sm"
-          />
-        </label>
-
-        <label className="grid gap-1">
-          <span className="text-[11px] text-zinc-600">Tampilkan</span>
-          <select
-            value={leaseView}
-            onChange={(e) => setLeaseView(e.target.value as any)}
-            className="h-9 w-[220px] rounded-lg border border-zinc-200 bg-white px-2 text-sm"
-          >
-            <option value="WET">Wet Leased (per sesi)</option>
-            <option value="DRY">Dry Leased (per jam)</option>
-          </select>
-        </label>
-        <div className="pb-1 text-xs text-zinc-500">Jam operasional: 07:30–15:45</div>
-      </div>
-
       {error ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mt-4 rounded-none border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       ) : null}
@@ -374,9 +375,9 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
               const hasSimulators = simNames.length > 0;
 
               return (
-                <div key={cat.key} className="rounded-xl border border-zinc-200 bg-white">
-                  <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-                    <div className="text-sm font-semibold text-zinc-800">{cat.label}</div>
+                <div key={cat.key} className="overflow-hidden rounded-none border border-zinc-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[#05164d] px-4 py-3 text-white">
+                    <div className="text-sm font-bold tracking-tight">{cat.label}</div>
                   </div>
 
                   {!hasSimulators ? (
@@ -387,14 +388,18 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
                     <div className="px-4 py-4">
                       <div className="grid gap-4">
                         {simNames.map((simName) => (
-                          <div key={simName} className="rounded-xl border border-zinc-200 bg-white p-4">
-                            <div className="text-sm font-semibold text-zinc-800">{simName}</div>
-                            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                          <div key={simName} className="overflow-hidden rounded-none border border-zinc-200 bg-white">
+                            <div className="flex items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
+                              <div className="text-sm font-bold text-[#05164d]">{simName}</div>
+                            </div>
+                            <div className="p-4">
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
                               {timeBlocks.map((b, i) => {
                                 const key = `${cat.key}@@${simName}@@${i}`;
                                 const status = statusByCell.get(key) ?? null;
                                 return <TimeButton key={key} label={b.label} status={status} />;
                               })}
+                              </div>
                             </div>
                           </div>
                         ))}

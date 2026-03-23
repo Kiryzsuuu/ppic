@@ -47,20 +47,24 @@ export default function HeaderNav({ session }: { session: Session }) {
   return (
     <div className="flex shrink-0 items-center gap-3">
       {/* Desktop nav */}
-      <nav className="hidden items-center gap-3 text-sm md:flex">
-        <Link className="rounded-md px-3 py-2 hover:bg-zinc-100" href="/" prefetch>
+      <nav className="hidden items-center gap-3 text-sm font-semibold md:flex">
+        <Link className="px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white" href="/" prefetch>
           Home
         </Link>
-        <Link className="rounded-md px-3 py-2 hover:bg-zinc-100" href="/dashboard" prefetch>
+        <Link className="px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white" href="/dashboard" prefetch>
           Dashboard
         </Link>
 
         {session ? null : (
           <>
-            <Link className="rounded-md px-3 py-2 hover:bg-zinc-100" href="/login" prefetch>
+            <Link className="px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white" href="/login" prefetch>
               Login
             </Link>
-            <Link className="rounded-md bg-zinc-900 px-3 py-2 text-white hover:bg-zinc-800" href="/register" prefetch>
+            <Link
+              className="bg-white px-3 py-2 font-bold text-[#05164d] shadow-sm transition hover:bg-white/90 hover:shadow"
+              href="/register"
+              prefetch
+            >
               Register
             </Link>
           </>
@@ -70,16 +74,17 @@ export default function HeaderNav({ session }: { session: Session }) {
       {session ? (
         <Link
           href="/account"
-          className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-white transition hover:bg-zinc-50 hover:scale-105 active:scale-100"
+          data-keep-rounded="true"
+          className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/10 text-white shadow-sm transition hover:bg-white/15 hover:shadow hover:scale-105 active:scale-100"
           aria-label={`Personal info: ${session.username} (${session.role})`}
           title={`${session.username} • ${session.role}`}
         >
           {avatarUrl ? (
-            <div className="relative h-full w-full bg-zinc-50">
+            <div data-keep-rounded="true" className="relative h-full w-full rounded-full bg-white/10">
               <Image src={avatarUrl} alt="Foto profil" fill unoptimized className="object-cover" />
             </div>
           ) : (
-            <span className="text-sm font-semibold text-zinc-700">
+            <span className="text-sm font-bold text-white">
               {(session.username.trim()[0] || "U").toUpperCase()}
             </span>
           )}
@@ -92,7 +97,7 @@ export default function HeaderNav({ session }: { session: Session }) {
         aria-label={open ? "Tutup menu" : "Buka menu"}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 md:hidden"
+        className="inline-flex h-10 w-10 items-center justify-center border border-white/25 bg-white/10 text-white shadow-sm transition hover:bg-white/15 hover:shadow md:hidden"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path

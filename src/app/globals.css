@@ -41,6 +41,11 @@ body {
   min-height: 100vh;
 }
 
+/* Square-corner theme: remove any rounded corners from Tailwind utilities */
+[class*="rounded"]:not([data-keep-rounded="true"]):not(.keep-rounded) {
+  border-radius: 0 !important;
+}
+
 .print-only {
   display: none;
 }

@@ -625,7 +625,7 @@ export default async function AdminDashboardReport({
         <div className="border-b border-zinc-200 pb-3">
           <div className="flex items-start gap-3">
             <img
-              src="/logoppic/image%20(25).png"
+              src="/logoppic/logoppic.7a5aa04c.png"
               alt="PPI Curug Simulator Training"
               width={56}
               height={40}

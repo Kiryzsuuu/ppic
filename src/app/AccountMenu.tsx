@@ -46,13 +46,14 @@ export default function AccountMenu({ username, role, photoUrl }: Props) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        data-keep-rounded="true"
         className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-white hover:bg-zinc-50"
         aria-label={`Menu akun: ${username} (${role})`}
         title={`${username} • ${role}`}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <div className="relative h-full w-full bg-zinc-50">
+        <div data-keep-rounded="true" className="relative h-full w-full rounded-full bg-zinc-50">
           {photoUrl ? (
             <Image src={photoUrl} alt="Foto profil" fill unoptimized className="object-cover" />
           ) : (

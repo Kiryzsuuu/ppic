@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PPI Curug Simulator Training",
   description: "PPI Curug Simulator Training — Simulator Booking & Management System",
+  icons: {
+    icon: "/PPIC-removebg-preview.png",
+  },
 };
 
 export default async function RootLayout({
@@ -35,15 +38,15 @@ export default async function RootLayout({
         <div className="relative min-h-dvh w-full overflow-x-hidden bg-white text-zinc-900">
           {/* Foreground app UI layer */}
           <div className="relative z-10">
-            <div className="border-b border-zinc-200 bg-white" data-print-hidden="true">
-              <div className="mx-auto flex min-w-0 max-w-6xl items-center justify-between gap-3 px-4 py-3">
-                <Link href="/" className="flex min-w-0 flex-1 items-center gap-2 font-semibold tracking-tight">
+            <div className="border-b border-white/15 bg-[#05164d] text-white shadow-sm" data-print-hidden="true">
+              <div className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+                <Link href="/" className="flex min-w-0 flex-1 items-center gap-2 font-bold tracking-tight">
                   <img
-                    src="/logoppic/image%20(25).png"
+                    src="/logoppic/logoppic.7a5aa04c.png"
                     alt="Politeknik Penerbangan Indonesia Curug"
-                    width={44}
-                    height={32}
-                    className="h-8 w-auto"
+                    width={56}
+                    height={40}
+                    className="h-10 w-auto"
                   />
                   <span className="min-w-0 truncate">
                     <span className="sm:hidden">PPI Curug</span>
@@ -79,7 +82,7 @@ export default async function RootLayout({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Web Official PPIC: ppicurug.ac.id
+                  ppicurug.ac.id
                 </a>
                 <div className="pt-3 text-sm font-semibold">Follow Us</div>
                 <a
@@ -88,7 +91,7 @@ export default async function RootLayout({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Instagram: @ppicurug.official
+                  @ppicurug.official
                 </a>
               </div>
             </div>

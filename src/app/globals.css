@@ -38,6 +38,22 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("/Gemini_Generated_Image_sxd1jbsxd1jbsxd1.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .print-only {
@@ -45,6 +61,10 @@ body {
 }
 
 @media print {
+  body::before {
+    display: none !important;
+  }
+
   [data-print-hidden="true"] {
     display: none !important;
   }

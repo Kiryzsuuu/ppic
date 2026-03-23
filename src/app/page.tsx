@@ -88,7 +88,7 @@ export default function Home() {
   const activeSlide = slides[active];
 
   return (
-    <div className="grid gap-10">
+    <div className="grid gap-0">
       {/* Hero with slideshow */}
       <section
         className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] -mt-8 w-screen overflow-hidden bg-white"
@@ -172,7 +172,7 @@ export default function Home() {
       </section>
 
       {/* About Us (directly under the hero image) */}
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
+      <section className="border-t border-zinc-200 py-10 sm:py-12">
         <div className="grid gap-3">
           <h2 className="text-lg font-semibold tracking-tight">About Us</h2>
           <p className="text-sm leading-relaxed text-zinc-600">
@@ -185,7 +185,7 @@ export default function Home() {
       </section>
 
       {/* Simulator Type */}
-      <section className="grid gap-4">
+      <section className="grid gap-4 border-t border-zinc-200 py-10 sm:py-12">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Simulator Type</h2>
           <p className="mt-1 text-sm text-zinc-600">Pilih kategori simulator yang tersedia.</p>
@@ -205,8 +205,7 @@ export default function Home() {
             logoAlt: logos.boeingLogoAlt,
             logoClassName: "object-contain",
           }].map((s) => (
-            <div key={s.title} className="rounded-2xl border border-zinc-200 bg-white p-6">
-              <div className="grid gap-4">
+            <div key={s.title} className="grid gap-4">
                 <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white p-0">
                   <div className="relative h-44 w-full sm:h-48">
                     <div className="absolute inset-6">
@@ -226,7 +225,6 @@ export default function Home() {
                 >
                   {authed ? `${s.title} ${s.subtitle}` : "Registrasi untuk Booking"}
                 </Link>
-              </div>
             </div>
           ))}
         </div>
@@ -235,7 +233,7 @@ export default function Home() {
       <SchedulePreview authed={authed} />
 
       {/* Map (outside footer, larger and centered) */}
-      <section className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
+      <section className="grid gap-3 border-t border-zinc-200 py-10 sm:py-12">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Map</h2>
           <p className="mt-1 text-sm text-zinc-600">Lokasi Politeknik Penerbangan Indonesia Curug.</p>

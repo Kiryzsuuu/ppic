@@ -323,7 +323,7 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
+    <section className="border-t border-zinc-200 py-10 sm:py-12">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Jadwal Simulator</h2>

@@ -38,27 +38,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  position: relative;
   min-height: 100vh;
-  isolation: isolate;
-}
-
-body > * {
-  position: relative;
-  z-index: 1;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image: url("/Gemini_Generated_Image_jw4ia9jw4ia9jw4i.png");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0.35;
-  pointer-events: none;
-  z-index: 0;
 }
 
 .print-only {

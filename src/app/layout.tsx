@@ -32,10 +32,10 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="relative min-h-dvh w-full overflow-x-hidden bg-white/70 text-zinc-900">
+        <div className="relative min-h-dvh w-full overflow-x-hidden bg-white text-zinc-900">
           {/* Foreground app UI layer */}
           <div className="relative z-10">
-            <div className="border-b border-zinc-200 bg-white/70" data-print-hidden="true">
+            <div className="border-b border-zinc-200 bg-white" data-print-hidden="true">
               <div className="mx-auto flex min-w-0 max-w-6xl items-center justify-between gap-3 px-4 py-3">
                 <Link href="/" className="flex min-w-0 flex-1 items-center gap-2 font-semibold tracking-tight">
                   <img
@@ -58,7 +58,7 @@ export default async function RootLayout({
 
             <main className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8">{children}</main>
 
-            <footer className="border-t border-zinc-200 bg-white/70" data-print-hidden="true">
+            <footer className="border-t border-zinc-200 bg-white" data-print-hidden="true">
               <div className="mx-auto max-w-6xl px-4 py-8">
               <div className="grid gap-8 md:grid-cols-12 md:items-start">
               <div className="grid gap-2 md:col-span-4">

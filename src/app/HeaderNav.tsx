@@ -111,7 +111,7 @@ export default function HeaderNav({ session }: { session: Session }) {
 
       {/* Mobile menu */}
       {open ? (
-        <div className="absolute left-0 right-0 top-[60px] z-50 border-b border-zinc-200 bg-white md:hidden">
+        <div className="absolute left-0 right-0 top-[60px] z-50 border-b border-zinc-200 bg-white text-zinc-900 md:hidden">
           <div className="mx-auto grid max-w-6xl gap-1 px-4 py-3 text-sm">
             <Link className="rounded-lg px-3 py-2 hover:bg-zinc-50" href="/" onClick={close}>
               Home

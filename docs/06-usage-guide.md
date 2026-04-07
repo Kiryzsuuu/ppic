@@ -2,6 +2,10 @@
 
 Dokumen ini berfokus ke cara memakai aplikasi dari sisi pengguna (UI).
 
+Catatan:
+- Banyak alur UI berkaitan langsung dengan status booking/pembayaran.
+- Middleware akan memaksa user yang belum verifikasi email untuk menyelesaikan OTP di `/verify-email`.
+
 ## A) Alur Utama User (ROLE: USER)
 
 ### 1) Registrasi
@@ -17,6 +21,9 @@ Jika setelah login diarahkan ke `/verify-email`:
 
 Catatan dev:
 - Jika SMTP tidak dikonfigurasi, OTP akan muncul di console server.
+
+Catatan implementasi:
+- Setelah OTP terverifikasi, session token akan diperbarui sehingga `emailVerified=true`.
 
 ### 3) Lengkapi Profil
 Halaman:
@@ -39,6 +46,10 @@ Upload dokumen sesuai tipe:
 Dokumen akan berstatus:
 - PENDING → menunggu verifikasi
 
+Catatan format file:
+- `PHOTO` harus JPG/PNG.
+- Dokumen selain `PHOTO` harus PDF.
+
 ### 5) Buat Booking
 Halaman:
 - `/user/booking/new`
@@ -48,6 +59,10 @@ Langkah:
 2. Pilih skema lease (WET/DRY).
 3. Simpan → booking akan dibuat dengan status awal `DRAFT`.
 
+Catatan penting (sesuai validasi API):
+- Untuk `WET`, `personCount` wajib 1 atau 2, dan jadwal (requestedStartAt/requestedEndAt) wajib.
+- Untuk `DRY`, sistem akan menormalisasi training menjadi label `Dry Leased (<deviceType>)`.
+
 ### 6) Submit Booking
 Dari detail booking (`/user/bookings/[id]`):
 1. Klik submit.
@@ -56,6 +71,10 @@ Dari detail booking (`/user/bookings/[id]`):
 
 Catatan:
 - Untuk lease `WET`, dokumen wajib biasanya harus lengkap (LICENSE, MEDICAL, ID) kecuali email user masuk allowlist `DOCS_BYPASS_EMAILS`.
+
+Jika submit berhasil:
+- Status booking berubah dari `DRAFT` → `WAIT_ADMIN_VERIFICATION`.
+- Sistem akan membuat notifikasi (best-effort) dan mengirim email (best-effort).
 
 ### 7) Menunggu Verifikasi Admin
 Admin memverifikasi profil/dokumen dan menyetujui booking.
@@ -76,6 +95,12 @@ Finance memvalidasi:
 Jika booking sudah masuk tahap penjadwalan:
 1. User memilih slot yang tersedia.
 2. Status slot berubah menjadi `BOOKED`.
+
+Syarat penting:
+- Pembayaran harus berstatus `VALIDATED` sebelum memilih slot.
+
+Catatan WET:
+- Slot WET harus jatuh ke sesi tetap (mis. sesi pagi/siang). Jika slot bukan sesi yang valid, sistem akan menolak.
 
 ### 12) Sertifikat
 Jika booking selesai dan admin menerbitkan sertifikat:
@@ -100,6 +125,10 @@ Aktivitas umum:
    - export CSV
 7. Kelola landing/home: `/admin/landing`
 
+Tips:
+- Saat verifikasi dokumen, staff bisa download file user lewat endpoint download dokumen.
+- Jika ada masalah unique index email opsional di Mongo, jalankan `npm run db:fix-mongo-indexes`.
+
 ## C) Alur Finance (ROLE: FINANCE)
 
 Halaman utama:
@@ -116,6 +145,9 @@ Aktivitas umum:
    - validasi / reject
 4. Export report:
    - `/finance/dashboard/report`
+
+Catatan:
+- Setelah payment berstatus `VALIDATED`, user bisa memilih slot jadwal.
 
 ## D) Alur Instructor (ROLE: INSTRUCTOR)
 
@@ -142,3 +174,7 @@ Notifikasi dibuat pada event tertentu (contoh submit booking).
 
 - Jika icon/tab browser belum berubah, lakukan hard refresh atau buka incognito (favicon sering cache).
 - Jika file upload gagal, cek permission folder `uploads/` (atau `UPLOAD_DIR`) dan pastikan server dapat menulis file.
+
+Tambahan tips:
+- Jika user selalu diarahkan ke `/verify-email`, pastikan OTP sudah diverifikasi (atau cek `User.emailVerifiedAt` di DB via Prisma Studio).
+- Jika endpoint schedule/slot terasa “kosong”, cek parameter tanggal di schedule preview (public slots default 7 hari ke depan).

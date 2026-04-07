@@ -12,15 +12,31 @@ Pola implementasi:
 - File disimpan sebagai `uploads/<generated-name>`
 - Database menyimpan metadata (mimeType, fileName, storagePath)
 
+Catatan implementasi:
+- Path penyimpanan relatif disimpan di DB (contoh: `uploads/1712_abcd1234.pdf`).
+- Aplikasi membaca file dengan `process.cwd()` + `storagePath` saat download.
+
 Endpoint terkait (contoh):
 - `POST /api/documents/upload`
 - `GET /api/documents/[id]/download`
 - `POST /api/finance/legal-documents/[id]/upload`
 - `GET /api/finance/legal-documents/[id]/download`
 
+### Landing images (opsional)
+
+Landing images disajikan melalui endpoint public:
+- `GET /api/public/landing-images/[name]`
+
+Lokasi file yang dibaca endpoint tersebut:
+- `<UPLOAD_DIR>/landing/<name>`
+
+Catatan cache:
+- Response landing-images diberi `Cache-Control: public, max-age=31536000, immutable`.
+
 Catatan production:
 - Pastikan folder upload berada di volume persistent.
 - Pastikan permission write sesuai.
+- Jika deploy multi-instance, pastikan storage dibagi (shared volume/object storage) atau desain upload disesuaikan.
 
 ## B) SMTP / Email Delivery
 
@@ -45,6 +61,10 @@ Base URL untuk link email:
 - `APP_URL` (reset password link)
 - `APP_BASE_URL` (CTA di template email)
 
+Checklist SMTP (umum):
+- Pastikan `SMTP_FROM` domain/address sesuai kebijakan provider.
+- Untuk Gmail: gunakan App Password (bukan password akun biasa).
+
 ## C) Cron Reminders
 
 Endpoint:
@@ -63,6 +83,15 @@ Cara memanggil:
 curl -H "x-cron-secret: <secret>" "https://<host>/api/public/cron/reminders/run?dryRun=1&limit=10"
 ```
 
+Header alternatif:
+
+```bash
+curl -H "Authorization: Bearer <secret>" "https://<host>/api/public/cron/reminders/run"
+```
+
+Catatan hasil:
+- Endpoint mengembalikan statistik scanned/candidates/sent/skipped + daftar error (jika ada).
+
 ## D) Device ID & Audit Log
 
 Cookie device id:
@@ -70,6 +99,9 @@ Cookie device id:
 
 Dibuat di middleware (`src/middleware.ts`) agar setiap browser/perangkat punya id stabil.
 Audit log akan merge `deviceId` ke `metadata.deviceId` saat menulis log (`src/lib/audit.ts`).
+
+Tujuan:
+- Mempermudah korelasi aktivitas tanpa mengandalkan identitas perangkat yang “asli”.
 
 ## E) Branding Assets (Logo & Icon Tab)
 
@@ -86,6 +118,17 @@ Catatan:
 
 - Brand color utama: `#05164d`
 - Global “square corners” ada di `src/app/globals.css` dengan pengecualian untuk avatar (`data-keep-rounded="true"`).
+
+---
+
+## H) Checklist Deploy (Minimum)
+
+Sebelum production, pastikan:
+- `DATABASE_URL` mengarah ke cluster/DB production
+- `JWT_SECRET` diset dan sama untuk semua instance
+- `REMINDER_CRON_SECRET` diset jika cron endpoint akan dipakai
+- `UPLOAD_DIR` berada di storage yang persistent
+- SMTP sudah diverifikasi (atau `MAIL_TRANSPORT` disetel sesuai kebutuhan)
 
 ## G) Scripts Operasional
 

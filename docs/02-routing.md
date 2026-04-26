@@ -97,14 +97,55 @@ Fungsi utama middleware:
 3) Memvalidasi JWT dari cookie session.
 4) Memaksa verifikasi email sebelum akses aplikasi (kecuali endpoint OTP + logout).
 5) Guard area role:
-   - `/admin/*` hanya untuk role `ADMIN`
-   - `/finance/*` hanya untuk role `FINANCE`
-   - `/instructor/*` hanya untuk role `INSTRUCTOR`
-   - `/user/*` hanya untuk role `USER`
+  - `/admin/*` hanya untuk role `ADMIN`
+  - `/finance/*` hanya untuk role `FINANCE`
+  - `/instructor/*` hanya untuk role `INSTRUCTOR`
+  - `/user/*` hanya untuk role `USER`
+
+### 1) Public assets vs protected pages
+
+Middleware secara eksplisit membiarkan file asset publik (gambar/icon/dll) agar tidak ikut redirect ke `/login`.
+Jika kamu melihat gambar/logo jadi “broken” karena redirect, cek rule public assets di middleware.
+
+### 2) Public routes (tidak butuh login)
+
+Contoh route yang diperlakukan public:
+- `/` (landing)
+- `/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email`
+- `/api/auth/**` (auth + OTP + password reset)
+- `/api/public/**` (landing, simulators, slots, cron reminders)
+
+Catatan:
+- Walaupun public, middleware tetap menempelkan cookie device id (`ppic_device_id`).
+
+### 3) Session cookie dan apa yang terjadi jika tidak login
+
+- Cookie session bernama: `ppic_session`.
+- Jika tidak ada cookie ini dan route bukan public → middleware redirect ke `/login?next=<path>`.
+
+### 4) Email verification gate
+
+Jika token valid tapi `emailVerified=false` di payload JWT:
+- User dipaksa ke `/verify-email`.
+- Pengecualian: endpoint OTP (`/api/auth/otp/**`) dan `/logout`.
+
+### 5) Role guard untuk area dashboard
+
+Middleware melakukan pengecekan sederhana berbasis prefix path:
+- Prefix `/admin` → harus role `ADMIN`
+- Prefix `/finance` → harus role `FINANCE`
+- Prefix `/instructor` → harus role `INSTRUCTOR`
+- Prefix `/user` → harus role `USER`
+
+Jika role tidak sesuai, user diarahkan ke `/dashboard`.
 
 ### Cookie yang relevan
 - `ppic_session` → JWT session (httpOnly)
 - `ppic_device_id` → device id (httpOnly) untuk audit log / pelacakan perangkat
+
+### Matcher
+
+Middleware aktif untuk hampir semua path, dengan pengecualian `_next/static`, `_next/image`, dan `favicon.ico` (lihat `export const config.matcher`).
 
 ## E) Responsiveness (UI Routing)
 
@@ -129,6 +170,43 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
 Kenapa `params` bertipe `Promise`?
 - Ini mengikuti pola App Router terbaru untuk memastikan params bisa di-resolve secara async.
+
+---
+
+## H) Pola Implementasi Route Handler (Yang Dipakai di Repo)
+
+### 1) Konvensi response JSON
+
+Hampir semua endpoint JSON memakai helper:
+- `jsonOk(data)` → `{ ok: true, data }`
+- `jsonError(message, status?, details?)` → `{ ok: false, error: { message, details } }`
+
+Helper berada di `src/lib/http.ts`.
+
+### 2) Guard untuk API (session/role)
+
+Untuk memaksa login:
+
+```ts
+import { requireSession } from "@/lib/rbac";
+
+const { session, response } = await requireSession();
+if (!session) return response;
+```
+
+Untuk memaksa role tertentu:
+
+```ts
+import { requireRole } from "@/lib/rbac";
+
+const { session, response } = await requireRole(["ADMIN"]);
+if (!session) return response;
+```
+
+### 3) Catatan server-only
+
+Route handlers (`src/app/api/**/route.ts`) selalu berjalan di server.
+Untuk akses DB, import `prisma` dari `src/lib/prisma.ts`.
 
 ## G) Cara Menambah Route Baru (Praktis)
 

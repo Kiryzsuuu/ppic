@@ -2,6 +2,10 @@
 
 Dokumentasi ini menjelaskan project **dari nol**: cara setup, routing (Next.js App Router), API routes, autentikasi + RBAC, Prisma + database, hingga panduan penggunaan per role.
 
+Catatan:
+- Versi “gabungan” seluruh dokumen ada di `docs/FULL_DOCUMENTATION.md`.
+- Sumber utama tetap dokumen per bab di folder `docs/` (lebih mudah dibaca dan diperbarui).
+
 ## Daftar Dokumen
 
 1) **Quickstart & Setup Lokal**

@@ -17,6 +17,8 @@ Cookie diset sebagai:
 - `secure: true` saat production
 - `maxAge: 8 jam`
 
+Implementasi ada di `src/lib/session.ts` (`setSessionCookie`).
+
 ### 2) JWT Payload
 Tipe payload session:
 
@@ -35,6 +37,11 @@ JWT ditandatangani dengan secret:
 JWT expiry:
 - 8 jam
 
+Catatan penting:
+- `src/lib/session.ts` akan **throw** jika `JWT_SECRET` tidak di-set (karena `getJwtSecret()` wajib ada untuk sign/verify session).
+- `src/middleware.ts` lebih “best-effort”: jika `JWT_SECRET` tidak ada, middleware tidak memverifikasi token dan membiarkan request lewat.
+  - Ini membantu dev yang belum set env, tapi untuk production sebaiknya selalu set `JWT_SECRET`.
+
 ## B) Middleware Guard
 
 File: `src/middleware.ts`
@@ -45,6 +52,9 @@ Yang dilakukan middleware:
 3) Jika ada token dan `JWT_SECRET` tersedia → verifikasi token.
 4) Jika `emailVerified=false` → paksa redirect ke `/verify-email` (kecuali endpoint OTP dan logout).
 5) Guard role untuk `/admin`, `/finance`, `/instructor`, `/user`.
+
+Cookie tambahan yang dibuat middleware:
+- `ppic_device_id` (httpOnly) → dipakai untuk korelasi audit log.
 
 ## C) RBAC untuk API
 
@@ -65,6 +75,10 @@ if (!session) return response;
 Jika tidak login → 401.
 Jika role tidak sesuai → 403.
 
+Implementasi ada di `src/lib/rbac.ts`:
+- `requireSession()` mengembalikan `{ ok:false }` lewat `jsonError("Unauthorized", 401)`
+- `requireRole([...])` mengembalikan `jsonError("Forbidden", 403)` bila role tidak match
+
 ## D) Login
 
 Endpoint:
@@ -83,6 +97,40 @@ Ringkasan alur:
 5) Tulis audit log `auth.login` (best-effort) termasuk `ip`, `userAgent`, `deviceId`.
 6) Sign JWT + set cookie session.
 
+### Request body
+
+```json
+{
+  "identifier": "admin",
+  "password": "admin123"
+}
+```
+
+`identifier` dapat berupa:
+- `username` (contoh: `admin`)
+- `email` (dicari di `User.email` maupun `Profile.email`, normalisasi lowercase jika mengandung `@`)
+
+### Response (sukses)
+
+```json
+{
+  "ok": true,
+  "data": {
+    "user": {
+      "id": "...",
+      "username": "admin",
+      "role": "ADMIN",
+      "emailVerified": true
+    }
+  }
+}
+```
+
+### Response (gagal)
+
+- Salah credential → 401 `Username/Email atau password salah`
+- Input tidak valid (Zod) → 400 `Input tidak valid` + `details`
+
 ## E) Logout
 
 Umumnya dilakukan dengan menghapus cookie `ppic_session`.
@@ -94,6 +142,32 @@ Endpoint:
 - `POST /api/auth/register`
 
 Umumnya membuat user role `USER`, menyimpan `passwordHash`, lalu mengarahkan user untuk melengkapi profil/dokumen.
+
+### Request body
+
+```json
+{
+  "username": "user_1",
+  "password": "secret123",
+  "fullName": "Nama Lengkap",
+  "email": "user@example.com",
+  "phone": "+62...",
+  "address": "...",
+  "placeOfBirth": "...",
+  "dateOfBirth": "2026-01-31",
+  "ktpNumber": "..."
+}
+```
+
+Catatan:
+- `username` harus 3–32 char dan hanya `[a-zA-Z0-9_]`.
+- Email dinormalisasi ke lowercase.
+
+### Behavior penting
+
+- Jika username/email sudah dipakai → 409.
+- Setelah berhasil register, server langsung membuat session (`ppic_session`) dengan `emailVerified=false`.
+- Sistem mencoba mengirim OTP verifikasi email secara best-effort (gagal kirim tidak membatalkan registrasi).
 
 ## G) Verifikasi Email (OTP)
 
@@ -114,6 +188,29 @@ Secret hashing OTP:
 Endpoint:
 - `POST /api/auth/otp/request` → minta OTP
 - `POST /api/auth/otp/verify` → verifikasi OTP
+
+### 1) Request OTP
+
+Tidak butuh body. Harus login.
+
+Response sukses (contoh):
+
+```json
+{ "ok": true, "data": { "expiresAt": "2026-...", "delivery": "..." } }
+```
+
+### 2) Verify OTP
+
+Request body:
+
+```json
+{ "code": "123456" }
+```
+
+Behavior:
+- Jika sukses, server refresh JWT session agar `emailVerified=true`.
+- Audit log best-effort: `auth.email_verified`.
+- Welcome email best-effort.
 
 Middleware memaksa user yang `emailVerified=false` untuk menyelesaikan ini sebelum akses fitur lain.
 
@@ -139,6 +236,26 @@ File:
 - `src/lib/passwordResetOtp.ts`
 
 Konsep mirip verifikasi email OTP (secret bisa `OTP_SECRET`).
+
+### Endpoint yang dipakai UI (OTP-based)
+
+Flow reset password yang aktif di repo ini menggunakan 3 endpoint:
+
+1) `POST /api/auth/password-reset/request`
+- Body: `{ "email": "user@example.com" }`
+- Selalu return `ok` untuk mencegah email enumeration (baik email ada atau tidak).
+
+2) `POST /api/auth/password-reset/verify-otp`
+- Body: `{ "email": "user@example.com", "code": "123456" }`
+- Jika OTP valid, server membuat cookie httpOnly jangka pendek: `ppic_pwreset` (15 menit)
+
+3) `POST /api/auth/password-reset/confirm`
+- Body: `{ "newPassword": "secret123" }`
+- Token reset diambil dari body `token` (opsional) atau dari cookie `ppic_pwreset`
+- Jika sukses, password user di-update dan cookie reset di-clear
+
+Catatan:
+- Setelah reset sukses, audit log best-effort: `auth.password_reset`.
 
 ## I) Device ID untuk Audit Log
 
@@ -175,6 +292,10 @@ Jika `JWT_SECRET` tidak diset, middleware saat ini melakukan *best-effort* dan m
 
 Implikasi:
 - Di production, **wajib** set `JWT_SECRET` agar guard bekerja benar.
+
+Rekomendasi:
+- Set `JWT_SECRET` panjang dan random.
+- Pastikan nilai sama pada semua instance (jika deploy multi-replica).
 
 ## L) Mengakses Session di Server Component
 

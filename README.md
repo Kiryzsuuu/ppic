@@ -18,7 +18,25 @@ Dokumentasi dari nol ada di folder `docs/`:
 - `docs/05-api-reference.md` (API reference)
 - `docs/06-usage-guide.md` (panduan penggunaan)
 
-## Quickstart (Local Dev)
+## 🚀 One-Click Setup (Recommended)
+
+**Paling Mudah!** Jalankan aplikasi dalam satu klik:
+
+### Windows
+Double-click `setup.bat` di folder project. Done! 🎉
+
+### macOS / Linux
+```bash
+chmod +x setup.sh && ./setup.sh
+```
+
+Semua dependencies, database, dan server akan otomatis setup dan running di `http://localhost:3000`
+
+👉 [Lihat detail setup](./SETUP.md)
+
+---
+
+## Quickstart (Manual - Local Dev)
 
 1) Install
 

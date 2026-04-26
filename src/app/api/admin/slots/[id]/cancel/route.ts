@@ -32,13 +32,25 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       select: { id: true, userId: true },
     });
 
-    const freed = await tx.scheduleSlot.update({
-      where: { id: slot.id },
-      data: { status: "AVAILABLE", booking: { disconnect: true } },
-      select: { id: true, status: true },
-    });
+    // If slot was auto-created (createdByAdminId IS NULL), delete it
+    // Otherwise, restore to AVAILABLE
+    let freedSlot;
+    if (slot.createdByAdminId === null) {
+      // Auto-created slot: delete it
+      freedSlot = await tx.scheduleSlot.delete({
+        where: { id: slot.id },
+        select: { id: true, status: true },
+      });
+    } else {
+      // Admin-created slot: restore to AVAILABLE
+      freedSlot = await tx.scheduleSlot.update({
+        where: { id: slot.id },
+        data: { status: "AVAILABLE", booking: { disconnect: true } },
+        select: { id: true, status: true },
+      });
+    }
 
-    return { booking, slot: freed };
+    return { booking, slot: freedSlot };
   });
 
   try {

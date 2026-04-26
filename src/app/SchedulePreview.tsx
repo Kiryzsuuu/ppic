@@ -175,21 +175,6 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
 
   const timeBlocks = useMemo(() => {
     const blocks: { label: string; startMs: number; endMs: number }[] = [];
-
-    if (leaseView === "WET") {
-      const sessions = [WET_SESSIONS_WIB.MORNING, WET_SESSIONS_WIB.AFTERNOON];
-      for (const s of sessions) {
-        const startIso = new Date(`${dateKey}T${minutesToHm(s.startMin)}:00+07:00`).toISOString();
-        const endIso = new Date(`${dateKey}T${minutesToHm(s.endMin)}:00+07:00`).toISOString();
-        blocks.push({
-          label: `${minutesToHm(s.startMin)}-${minutesToHm(s.endMin)} ${s.label}`,
-          startMs: new Date(startIso).getTime(),
-          endMs: new Date(endIso).getTime(),
-        });
-      }
-      return blocks;
-    }
-
     const stepMin = 60;
     const ranges = [
       { startMin: 7 * 60 + 30, endMin: 11 * 60 + 30 },
@@ -212,7 +197,7 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
     }
 
     return blocks;
-  }, [dateKey, leaseView]);
+  }, [dateKey]);
 
   const simulatorNamesByCategory = useMemo(() => {
     return {
@@ -347,8 +332,8 @@ export default function SchedulePreview({ authed }: { authed: boolean | null }) 
               onChange={(e) => setLeaseView(e.target.value as any)}
               className="h-9 w-[220px] rounded-none border border-zinc-200 bg-white px-2 text-sm transition-colors duration-200 focus:border-zinc-400 focus:outline-none"
             >
-              <option value="WET">Wet Leased (per sesi)</option>
-              <option value="DRY">Dry Leased (per jam)</option>
+              <option value="WET">Wet Leased</option>
+              <option value="DRY">Dry Leased</option>
             </select>
           </label>
 

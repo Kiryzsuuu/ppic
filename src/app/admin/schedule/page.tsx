@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SchedulePreview from "../../SchedulePreview";
 import { WET_SESSIONS_WIB, getWetSessionKeyForRange, toWibMinutes } from "@/lib/schedule";
 
@@ -36,14 +36,20 @@ export default function AdminSchedulePage() {
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [bulkUntilDate, setBulkUntilDate] = useState("");
-  const [bulkRepeatUnit, setBulkRepeatUnit] = useState<"DAY" | "WEEK" | "MONTH" | "YEAR">("DAY");
-  const [bulkRepeatEvery, setBulkRepeatEvery] = useState<string>("1");
+  const [bulkRepeatUnit, setBulkRepeatUnit] = useState<"WEEK" | "MONTH">("WEEK");
   const [loading, setLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStartAt, setEditStartAt] = useState("");
   const [editEndAt, setEditEndAt] = useState("");
   const [confirmDeleteSlotId, setConfirmDeleteSlotId] = useState<string | null>(null);
+
+  // Calendar view
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
   const [staffLeaseType, setStaffLeaseType] = useState<"WET" | "DRY">("WET");
   const [staffUserId, setStaffUserId] = useState<string>("");
@@ -146,6 +152,16 @@ export default function AdminSchedulePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staffDrySessionKey, staffStartMin]);
 
+  const slotsByDate = useMemo(() => {
+    const map: Record<string, typeof slots> = {};
+    for (const s of slots) {
+      const key = new Date(s.startAt).toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+      if (!map[key]) map[key] = [];
+      map[key].push(s);
+    }
+    return map;
+  }, [slots]);
+
   useEffect(() => {
     loadSlots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,25 +217,8 @@ export default function AdminSchedulePage() {
       setError("Pilih simulator terlebih dahulu.");
       return;
     }
-    if (!startAt || !endAt) {
-      setError("Pilih waktu Start dan End terlebih dahulu.");
-      return;
-    }
     if (!bulkUntilDate) {
       setError("Pilih sampai tanggal terlebih dahulu.");
-      return;
-    }
-
-    const everyInt = Number.parseInt(bulkRepeatEvery.trim() || "1", 10);
-    if (!Number.isFinite(everyInt) || everyInt < 1) {
-      setError("Repeat setiap harus angka >= 1.");
-      return;
-    }
-
-    const s = new Date(startAt);
-    const en = new Date(endAt);
-    if (!(s < en)) {
-      setError("Waktu mulai harus lebih awal dari waktu selesai.");
       return;
     }
 
@@ -230,11 +229,10 @@ export default function AdminSchedulePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         simulatorId,
-        startAt: s.toISOString(),
-        endAt: en.toISOString(),
         untilDate: bulkUntilDate,
         repeatUnit: bulkRepeatUnit,
-        repeatEvery: everyInt,
+        workdaysOnly: true,
+        autoGenerateHourly: true,
       }),
     });
 
@@ -662,7 +660,7 @@ export default function AdminSchedulePage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 grid gap-4">
         <div className="text-sm font-semibold">Buat Slot Berulang</div>
-        <form onSubmit={createBulkSlots} className="grid gap-3 md:grid-cols-4 md:items-end">
+        <form onSubmit={createBulkSlots} className="grid gap-3 md:grid-cols-3 md:items-end">
           <label className="grid gap-1 text-sm">
             <span className="font-medium">Simulator</span>
             <select className="h-10 rounded-lg border border-zinc-200 px-3" value={simulatorId} onChange={(e) => setSimulatorId(e.target.value)}>
@@ -673,13 +671,11 @@ export default function AdminSchedulePage() {
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-medium">Start (slot pertama)</span>
-            <input type="datetime-local" className="h-10 rounded-lg border border-zinc-200 px-3" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
-          </label>
-
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">End (slot pertama)</span>
-            <input type="datetime-local" className="h-10 rounded-lg border border-zinc-200 px-3" value={endAt} onChange={(e) => setEndAt(e.target.value)} />
+            <span className="font-medium">Mode</span>
+            <select className="h-10 rounded-lg border border-zinc-200 px-3" value={bulkRepeatUnit} onChange={(e) => setBulkRepeatUnit(e.target.value as any)}>
+              <option value="WEEK">Senin-Jumat (1 minggu)</option>
+              <option value="MONTH">Setiap hari kerja sebulan</option>
+            </select>
           </label>
 
           <label className="grid gap-1 text-sm">
@@ -687,169 +683,202 @@ export default function AdminSchedulePage() {
             <input type="date" className="h-10 rounded-lg border border-zinc-200 bg-white px-3" value={bulkUntilDate} onChange={(e) => setBulkUntilDate(e.target.value)} />
           </label>
 
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Ulangi</span>
-            <select className="h-10 rounded-lg border border-zinc-200 px-3" value={bulkRepeatUnit} onChange={(e) => setBulkRepeatUnit(e.target.value as any)}>
-              <option value="DAY">Harian</option>
-              <option value="WEEK">Mingguan</option>
-              <option value="MONTH">Bulanan</option>
-              <option value="YEAR">Tahunan</option>
-            </select>
-          </label>
-
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Setiap</span>
-            <input className="h-10 rounded-lg border border-zinc-200 px-3" value={bulkRepeatEvery} onChange={(e) => setBulkRepeatEvery(e.target.value)} placeholder="1" />
-          </label>
-
-          <button disabled={bulkLoading} className="h-10 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 md:col-span-4">
+          <button disabled={bulkLoading} className="h-10 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 md:col-span-3">
             {bulkLoading ? "Menyimpan..." : "Buat Slot Berulang"}
           </button>
 
-          <div className="text-xs text-zinc-500 md:col-span-4">
-            Catatan: slot yang bentrok dengan slot lain akan dilewati. Mode "Bulanan" akan mengisi slot harian sampai akhir bulan (berdasarkan bulan dari slot pertama).
+          <div className="text-xs text-zinc-500 md:col-span-3">
+            Slot dibuat otomatis untuk semua jam (07:30–15:45 WIB, per jam). Slot yang bentrok akan dilewati.
           </div>
         </form>
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div className="text-sm font-semibold">Daftar Slot</div>
         </div>
-        <div className="mt-4 grid gap-2">
-          {slots.length === 0 ? (
-            <div className="text-sm text-zinc-600">Belum ada slot.</div>
-          ) : (
-            slots.map((s) => {
-              const start = new Date(s.startAt);
-              const end = new Date(s.endAt);
-              const sessionKey = getWetSessionKeyForRange(start, end);
-              const isFullDayWetRange =
-                toWibMinutes(start) === WET_SESSIONS_WIB.MORNING.startMin &&
-                toWibMinutes(end) === WET_SESSIONS_WIB.AFTERNOON.endMin;
 
-              return (
-                <div key={s.id} className="rounded-xl border border-zinc-200 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">
-                      {new Date(s.startAt).toLocaleString()} - {new Date(s.endAt).toLocaleString()}
-                    </div>
-                    <div className="text-xs text-zinc-600">{s.status}</div>
-                  </div>
-                  <div className="mt-1 text-xs text-zinc-600">
-                    {s.simulator.category} {s.simulator.name}
-                  </div>
-                  {s.booking ? (
-                    <div className="mt-2 text-xs text-zinc-600">
-                      Booking: {s.booking.id} ({s.booking.user?.username ?? "-"})
-                    </div>
-                  ) : null}
-
-                  {s.status === "AVAILABLE" && !s.booking && !sessionKey ? (
-                    isFullDayWetRange ? (
-                      <div className="mt-2 text-xs text-zinc-600">
-                        Slot ini full-day (07:30–15:45). Saat booking WET via <a href="#staff-booking" className="underline">form di atas</a>, sistem akan otomatis memecah menjadi sesi Morning/Afternoon.
-                      </div>
-                    ) : (
-                      <div className="mt-2 text-xs text-amber-700">
-                        Slot ini bukan sesi WET (Morning/Afternoon). Jika mau dipakai untuk WET, silakan edit jam slot agar sesuai sesi.
-                      </div>
-                    )
-                  ) : null}
-
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <button
-                    disabled={loading}
-                    onClick={() => startEdit(s)}
-                    className="h-9 rounded-lg border border-zinc-200 px-3 text-sm hover:bg-zinc-50 disabled:opacity-60"
-                  >
-                    Edit Jadwal
-                  </button>
-
-                  {s.status === "BOOKED" && s.booking ? (
-                    <button
-                      disabled={loading}
-                      onClick={() => cancelBooking(s.id)}
-                      className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800 disabled:opacity-60"
-                    >
-                      Cancel Booking
-                    </button>
-                  ) : null}
-
-                  {s.status !== "BOOKED" && !s.booking ? (
-                    confirmDeleteSlotId === s.id ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-xs text-zinc-600">Yakin delete slot ini?</div>
-                        <button
-                          disabled={loading}
-                          onClick={() => setConfirmDeleteSlotId(null)}
-                          className="h-9 rounded-lg border border-zinc-200 px-3 text-sm hover:bg-zinc-50 disabled:opacity-60"
-                        >
-                          Batal
-                        </button>
-                        <button
-                          disabled={loading}
-                          onClick={() => deleteSlot(s.id)}
-                          className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800 disabled:opacity-60"
-                        >
-                          Ya, Delete
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        disabled={loading}
-                        onClick={() => {
-                          setConfirmDeleteSlotId(s.id);
-                        }}
-                        className="h-9 rounded-lg border border-zinc-200 px-3 text-sm hover:bg-zinc-50 disabled:opacity-60"
-                      >
-                        Delete Slot
-                      </button>
-                    )
-                  ) : null}
-                </div>
-
-                {editingId === s.id ? (
-                  <div className="mt-3 grid gap-3 md:grid-cols-3 md:items-end">
-                    <label className="grid gap-1 text-sm">
-                      <span className="font-medium">Start</span>
-                      <input
-                        type="datetime-local"
-                        className="h-10 rounded-lg border border-zinc-200 px-3"
-                        value={editStartAt}
-                        onChange={(e) => setEditStartAt(e.target.value)}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-sm">
-                      <span className="font-medium">End</span>
-                      <input
-                        type="datetime-local"
-                        className="h-10 rounded-lg border border-zinc-200 px-3"
-                        value={editEndAt}
-                        onChange={(e) => setEditEndAt(e.target.value)}
-                      />
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        disabled={loading}
-                        onClick={() => saveEdit(s.id)}
-                        className="h-10 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
-                      >
-                        Simpan
-                      </button>
-                      <button
-                        disabled={loading}
-                        onClick={() => setEditingId(null)}
-                        className="h-10 rounded-lg border border-zinc-200 px-4 text-sm hover:bg-zinc-50 disabled:opacity-60"
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+        {/* Calendar */}
+        <div className="grid gap-6">
+          <div className="grid gap-4">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  if (calendarMonth.month === 0) {
+                    setCalendarMonth({ year: calendarMonth.year - 1, month: 11 });
+                  } else {
+                    setCalendarMonth({ ...calendarMonth, month: calendarMonth.month - 1 });
+                  }
+                }}
+                className="h-10 w-10 rounded-lg border border-zinc-200 hover:bg-zinc-50"
+              >
+                ◀
+              </button>
+              <div className="text-lg font-semibold">
+                {new Date(calendarMonth.year, calendarMonth.month, 1).toLocaleDateString("id-ID", {
+                  month: "long",
+                  year: "numeric",
+                })}
               </div>
-              );
-            })
+              <button
+                type="button"
+                onClick={() => {
+                  if (calendarMonth.month === 11) {
+                    setCalendarMonth({ year: calendarMonth.year + 1, month: 0 });
+                  } else {
+                    setCalendarMonth({ ...calendarMonth, month: calendarMonth.month + 1 });
+                  }
+                }}
+                className="h-10 w-10 rounded-lg border border-zinc-200 hover:bg-zinc-50"
+              >
+                ▶
+              </button>
+            </div>
+
+            {/* Calendar Grid */}
+            <div className="grid gap-2">
+              {/* Weekday headers */}
+              <div className="grid grid-cols-7 gap-1">
+                {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((day) => (
+                  <div key={day} className="text-center text-xs font-semibold text-zinc-600 py-2">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              {/* Days */}
+              <div className="grid grid-cols-7 gap-1">
+                {(() => {
+                  const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
+                  // Adjust: Monday = 0 (1 % 7), so Sunday is 0. We need Monday = 0.
+                  let dayOfWeek = firstDay.getDay(); // 0 = Sunday
+                  dayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday = 0
+
+                  const daysInMonth = new Date(calendarMonth.year, calendarMonth.month + 1, 0).getDate();
+                  const cells = [];
+
+                  // Empty cells before first day
+                  for (let i = 0; i < dayOfWeek; i++) {
+                    cells.push(null);
+                  }
+
+                  // Days of month
+                  for (let day = 1; day <= daysInMonth; day++) {
+                    cells.push(day);
+                  }
+
+                  return cells.map((day, idx) => {
+                    if (day === null) {
+                      return <div key={`empty-${idx}`} className="aspect-square" />;
+                    }
+
+                    const dateKey = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const daySlots = slotsByDate[dateKey] || [];
+                    const available = daySlots.filter((s: Slot) => s.status === "AVAILABLE").length;
+                    const booked = daySlots.filter((s: Slot) => s.status === "BOOKED").length;
+                    const locked = daySlots.filter((s: Slot) => s.status === "LOCKED").length;
+                    const isSelected = selectedDateKey === dateKey;
+
+                    return (
+                      <button
+                        key={`day-${day}`}
+                        type="button"
+                        onClick={() => setSelectedDateKey(isSelected ? null : dateKey)}
+                        className={`aspect-square rounded-lg border-2 p-2 flex flex-col items-center justify-center gap-1 transition ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50"
+                            : daySlots.length > 0
+                              ? "border-zinc-200 hover:bg-zinc-50"
+                              : "border-zinc-100 text-zinc-400"
+                        }`}
+                      >
+                        <div className="text-sm font-medium">{day}</div>
+                        {daySlots.length > 0 && (
+                          <div className="flex gap-0.5">
+                            {available > 0 && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" title={`${available} tersedia`} />}
+                            {booked > 0 && <div className="w-1.5 h-1.5 rounded-full bg-red-500" title={`${booked} terpesan`} />}
+                            {locked > 0 && <div className="w-1.5 h-1.5 rounded-full bg-zinc-400" title={`${locked} dikunci`} />}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* Slot Details Panel */}
+          {selectedDateKey && slotsByDate[selectedDateKey] && (
+            <div className="border-t border-zinc-200 pt-6">
+              <div className="text-sm font-semibold mb-4">Slot untuk {selectedDateKey}</div>
+              <div className="grid gap-3">
+                {slotsByDate[selectedDateKey].map((s: Slot) => {
+                  const start = new Date(s.startAt);
+                  const end = new Date(s.endAt);
+                  const startTime = start.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Jakarta" });
+                  const endTime = end.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Jakarta" });
+                  const isEditing = editingId === s.id;
+
+                  return (
+                    <div key={s.id} className="border border-zinc-200 rounded-lg p-4">
+                      {isEditing ? (
+                        <div className="grid gap-3 md:grid-cols-3 md:items-end">
+                          <label className="grid gap-1 text-sm">
+                            <span className="font-medium">Start</span>
+                            <input type="datetime-local" className="h-10 rounded-lg border border-zinc-200 px-3" value={editStartAt} onChange={(e) => setEditStartAt(e.target.value)} />
+                          </label>
+                          <label className="grid gap-1 text-sm">
+                            <span className="font-medium">End</span>
+                            <input type="datetime-local" className="h-10 rounded-lg border border-zinc-200 px-3" value={editEndAt} onChange={(e) => setEditEndAt(e.target.value)} />
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button disabled={loading} onClick={() => saveEdit(s.id)} className="h-10 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60">Simpan</button>
+                            <button disabled={loading} onClick={() => setEditingId(null)} className="h-10 rounded-lg border border-zinc-200 px-4 text-sm hover:bg-zinc-50 disabled:opacity-60">Batal</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div>
+                              <div className="font-medium">{startTime} - {endTime}</div>
+                              <div className="text-xs text-zinc-600">{s.simulator.category} {s.simulator.name}</div>
+                            </div>
+                            <div className={`text-xs px-2 py-1 rounded whitespace-nowrap ${
+                              s.status === "AVAILABLE" ? "bg-emerald-100 text-emerald-700" :
+                              s.status === "BOOKED" ? "bg-red-100 text-red-700" :
+                              "bg-zinc-100 text-zinc-700"
+                            }`}>
+                              {s.status}
+                            </div>
+                          </div>
+                          {s.booking && <div className="text-xs text-zinc-600 mb-3">Booking: {s.booking.user?.username ?? "-"}</div>}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button disabled={loading} onClick={() => startEdit(s)} className="h-9 rounded-lg border border-zinc-200 px-3 text-sm hover:bg-zinc-50 disabled:opacity-60">Edit</button>
+                            {s.status === "BOOKED" && s.booking && (
+                              <button disabled={loading} onClick={() => cancelBooking(s.id)} className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800 disabled:opacity-60">Cancel Booking</button>
+                            )}
+                            {s.status !== "BOOKED" && !s.booking && (
+                              confirmDeleteSlotId === s.id ? (
+                                <>
+                                  <div className="text-xs text-zinc-600">Yakin?</div>
+                                  <button disabled={loading} onClick={() => setConfirmDeleteSlotId(null)} className="h-9 rounded-lg border border-zinc-200 px-3 text-sm hover:bg-zinc-50 disabled:opacity-60">Batal</button>
+                                  <button disabled={loading} onClick={() => deleteSlot(s.id)} className="h-9 rounded-lg bg-red-600 px-3 text-sm text-white hover:bg-red-700 disabled:opacity-60">Delete</button>
+                                </>
+                              ) : (
+                                <button disabled={loading} onClick={() => setConfirmDeleteSlotId(s.id)} className="h-9 rounded-lg border border-zinc-200 px-3 text-sm hover:bg-zinc-50 disabled:opacity-60">Delete</button>
+                              )
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </section>

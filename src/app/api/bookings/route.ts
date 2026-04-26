@@ -6,31 +6,35 @@ import { requireRole } from "@/lib/rbac";
 
 const CreateBookingSchema = z.object({
   simulatorId: z.string().min(1),
+  bookingType: z.enum(["LEASE", "TRAINING"]).default("LEASE"),
   leaseType: z.enum(["WET", "DRY"]),
-  trainingCode: z.enum(["PPC", "INITIAL_ATPL", "TYPE_RATING", "OTHER"]),
+  trainingCode: z.enum(["PPC", "INITIAL_ATPL", "TYPE_RATING", "DIFFERENCES", "OTHER"]),
   trainingName: z.string().min(2).max(120),
   deviceType: z.enum(["FFS", "FTD"]).optional(),
   personCount: z.number().int().min(1).max(2).optional(),
   paymentMethod: z.enum(["QRIS", "TRANSFER"]).optional(),
   preferredSlotId: z.string().min(1).optional(),
+  institutionName: z.string().max(120).optional(),
   requestedStartAt: z.string().datetime().optional(),
   requestedEndAt: z.string().datetime().optional(),
 }).superRefine((val, ctx) => {
   if (val.leaseType === "WET") {
-    if (!["PPC", "TYPE_RATING", "OTHER"].includes(val.trainingCode)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TrainingCode untuk Wet harus PPC/TYPE_RATING/OTHER" });
+    if (!["PPC", "TYPE_RATING", "DIFFERENCES", "OTHER"].includes(val.trainingCode)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TrainingCode untuk Wet harus PPC/TYPE_RATING/DIFFERENCES/OTHER" });
     }
     if (val.personCount !== 1 && val.personCount !== 2) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "personCount wajib (1 atau 2) untuk Wet Leased" });
     }
 
     if (!val.requestedStartAt || !val.requestedEndAt) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Jadwal (requestedStartAt/requestedEndAt) wajib diisi" });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "requestedStartAt dan requestedEndAt wajib untuk Wet Leased" });
     } else {
       const start = new Date(val.requestedStartAt);
       const end = new Date(val.requestedEndAt);
-      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Format jadwal tidak valid" });
+      if (!Number.isFinite(start.getTime())) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Format requestedStartAt tidak valid" });
+      } else if (!Number.isFinite(end.getTime())) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Format requestedEndAt tidak valid" });
       } else if (end.getTime() <= start.getTime()) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Jam selesai harus setelah jam mulai" });
       }
@@ -108,6 +112,7 @@ export async function POST(req: NextRequest) {
 
     let trainingCode = input.trainingCode;
     let trainingName = input.trainingName;
+    let preferredSlotId = input.preferredSlotId;
 
     // For DRY, we normalize training label to avoid mismatch.
     if (input.leaseType === "DRY") {
@@ -115,17 +120,90 @@ export async function POST(req: NextRequest) {
       trainingName = `Dry Leased (${input.deviceType})`;
     }
 
+    // For WET, validate slot time and handle auto-create or verify existing slot
+    if (input.leaseType === "WET" && input.requestedStartAt && input.requestedEndAt) {
+      const startTime = new Date(input.requestedStartAt);
+      const endTime = new Date(input.requestedEndAt);
+
+      // Validate 1-hour duration and operating hours
+      const durationMs = endTime.getTime() - startTime.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+      if (Math.abs(durationHours - 1) > 0.01) {
+        return jsonError("WET Leased harus 1 jam. Silakan pilih jam yang sesuai.", 400);
+      }
+
+      // Get minutes in WIB timezone
+      const wibFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Jakarta",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const parts = wibFormatter.formatToParts(startTime);
+      const hh = parts.find((p) => p.type === "hour")?.value ?? "00";
+      const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
+      const startMinutes = parseInt(hh) * 60 + parseInt(mm);
+
+      // Validate operating hours: 07:30-11:30 and 11:45-15:45
+      const isValidMorning = startMinutes >= 7 * 60 + 30 && startMinutes + 60 <= 11 * 60 + 30;
+      const isValidAfternoon = startMinutes >= 11 * 60 + 45 && startMinutes + 60 <= 15 * 60 + 45;
+      if (!isValidMorning && !isValidAfternoon) {
+        return jsonError("Jam harus dalam operasional: 07:30-11:30 atau 11:45-15:45 WIB.", 400);
+      }
+
+      // Check for conflicts with existing BOOKED/LOCKED slots
+      const conflictSlot = await prisma.scheduleSlot.findFirst({
+        where: {
+          simulatorId: input.simulatorId,
+          status: { in: ["BOOKED", "LOCKED"] },
+          startAt: { lt: endTime },
+          endAt: { gt: startTime },
+        },
+      });
+
+      if (conflictSlot) {
+        return jsonError("Jam tersebut sudah di-booking atau di-lock. Silakan pilih jam lain.", 409);
+      }
+
+      // If preferredSlotId provided, verify it exists and is AVAILABLE
+      if (preferredSlotId) {
+        const preferredSlot = await prisma.scheduleSlot.findUnique({
+          where: { id: preferredSlotId },
+        });
+        if (!preferredSlot) {
+          return jsonError("Slot tidak ditemukan.", 404);
+        }
+        if (preferredSlot.status !== "AVAILABLE") {
+          return jsonError("Slot sudah di-booking. Silakan pilih jam lain.", 409);
+        }
+      } else {
+        // Auto-create slot LOCKED for virtual slot
+        const newSlot = await prisma.scheduleSlot.create({
+          data: {
+            simulatorId: input.simulatorId,
+            startAt: startTime,
+            endAt: endTime,
+            status: "LOCKED",
+            createdByAdminId: null,
+          },
+        });
+        preferredSlotId = newSlot.id;
+      }
+    }
+
     const booking = await prisma.booking.create({
       data: {
         userId: session.userId,
         simulatorId: input.simulatorId,
+        bookingType: input.bookingType ?? "LEASE",
         leaseType: input.leaseType,
         trainingCode,
         trainingName,
         deviceType: input.deviceType,
         personCount: input.personCount ?? 1,
         paymentMethod: input.paymentMethod ?? "QRIS",
-        preferredSlotId: input.preferredSlotId,
+        preferredSlotId,
+        institutionName: input.institutionName ?? null,
         requestedStartAt: input.requestedStartAt ? new Date(input.requestedStartAt) : undefined,
         requestedEndAt: input.requestedEndAt ? new Date(input.requestedEndAt) : undefined,
         status: "DRAFT",

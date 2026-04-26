@@ -3,40 +3,17 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonOk } from "@/lib/http";
 import { requireRole } from "@/lib/rbac";
-import { WET_SESSIONS_WIB, getWetSessionKeyForRange, isWetFullDayRange } from "@/lib/schedule";
 
 const BulkCreateSchema = z.object({
   simulatorId: z.string().min(1),
-  startAt: z.string().datetime(),
-  endAt: z.string().datetime(),
+  startAt: z.string().datetime().optional(),
+  endAt: z.string().datetime().optional(),
   untilDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // WIB date key
-  repeatUnit: z.enum(["DAY", "WEEK", "MONTH", "YEAR"]).default("DAY"),
-  repeatEvery: z.number().int().min(1).max(366).default(1),
+  repeatUnit: z.enum(["WEEK", "MONTH"]).optional(),
+  repeatEvery: z.number().int().min(1).max(366).optional().default(1),
+  workdaysOnly: z.boolean().optional().default(false),
+  autoGenerateHourly: z.boolean().optional().default(false),
 });
-
-function addInterval(d: Date, unit: "DAY" | "WEEK" | "MONTH" | "YEAR", every: number) {
-  const next = new Date(d);
-  if (unit === "DAY") next.setDate(next.getDate() + every);
-  else if (unit === "WEEK") next.setDate(next.getDate() + every * 7);
-  else if (unit === "MONTH") next.setMonth(next.getMonth() + every);
-  else next.setFullYear(next.getFullYear() + every);
-  return next;
-}
-
-function endOfMonthWib(d: Date) {
-  // Treat WIB as UTC+7 and compute end-of-month at 23:59:59.999 WIB.
-  const wib = new Date(d.getTime() + 7 * 60 * 60 * 1000);
-  const y = wib.getUTCFullYear();
-  const m = wib.getUTCMonth();
-  // 23:59:59.999 WIB = 16:59:59.999Z
-  return new Date(Date.UTC(y, m + 1, 0, 16, 59, 59, 999));
-}
-
-function buildWibDateTime(dateKey: string, min: number) {
-  const hh = String(Math.floor(min / 60)).padStart(2, "0");
-  const mm = String(min % 60).padStart(2, "0");
-  return new Date(`${dateKey}T${hh}:${mm}:00+07:00`);
-}
 
 export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(["ADMIN"]);
@@ -46,93 +23,90 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const input = BulkCreateSchema.parse(body);
 
-    const startAt0 = new Date(input.startAt);
-    const endAt0 = new Date(input.endAt);
-    if (!(startAt0 < endAt0)) return jsonError("Waktu mulai harus lebih awal dari waktu selesai.", 400);
-
-    const isSession = Boolean(getWetSessionKeyForRange(startAt0, endAt0));
-    const isFullDay = isWetFullDayRange(startAt0, endAt0);
-
-    if (!isSession && !isFullDay) {
-      return jsonError(
-        "Slot harus sesuai sesi WET (07:30–11:30 atau 11:45–15:45 WIB) atau full-day WET (07:30–15:45 WIB).",
-        400,
-      );
-    }
-
     // Until end-of-day (WIB)
     let untilExclusive = new Date(`${input.untilDate}T23:59:59.999+07:00`);
     if (!Number.isFinite(untilExclusive.getTime())) return jsonError("untilDate tidak valid", 400);
 
-    // UX expectation: "Bulanan" is used to fill a month (daily within the month) rather than
-    // repeating only once per month. Limit the range to the startAt month (WIB).
-    if (input.repeatUnit === "MONTH") {
-      const monthEnd = endOfMonthWib(startAt0);
-      if (monthEnd.getTime() < untilExclusive.getTime()) untilExclusive = monthEnd;
-    }
-
     const MAX_OCCURRENCES = 500;
-
-    let startAt = startAt0;
-    let endAt = endAt0;
-
     let created = 0;
     let skippedConflict = 0;
     let stoppedByLimit = false;
 
-    for (let i = 0; i < MAX_OCCURRENCES; i++) {
-      if (startAt.getTime() > untilExclusive.getTime()) break;
+    // Operating hours (per jam): 07:30-08:30, 08:30-09:30, ..., 14:45-15:45
+    const operatingHours = [
+      { startMin: 7 * 60 + 30, endMin: 8 * 60 + 30 },
+      { startMin: 8 * 60 + 30, endMin: 9 * 60 + 30 },
+      { startMin: 9 * 60 + 30, endMin: 10 * 60 + 30 },
+      { startMin: 10 * 60 + 30, endMin: 11 * 60 + 30 },
+      { startMin: 11 * 60 + 45, endMin: 12 * 60 + 45 },
+      { startMin: 12 * 60 + 45, endMin: 13 * 60 + 45 },
+      { startMin: 13 * 60 + 45, endMin: 14 * 60 + 45 },
+      { startMin: 14 * 60 + 45, endMin: 15 * 60 + 45 },
+    ];
 
-      const occurrenceDateKey = startAt.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
-      const sessionsToCreate = isFullDay
-        ? [
-            {
-              startAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.MORNING.startMin),
-              endAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.MORNING.endMin),
-            },
-            {
-              startAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.AFTERNOON.startMin),
-              endAt: buildWibDateTime(occurrenceDateKey, WET_SESSIONS_WIB.AFTERNOON.endMin),
-            },
-          ]
-        : [{ startAt, endAt }];
+    // Calculate start date for iteration
+    const today = new Date();
+    let currentDate = new Date(today.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }) + "T00:00:00+07:00");
 
-      for (const ses of sessionsToCreate) {
+    let occurrenceCount = 0;
+    while (currentDate.getTime() <= untilExclusive.getTime() && occurrenceCount < MAX_OCCURRENCES) {
+      // Skip weekends if workdaysOnly is enabled
+      if (input.workdaysOnly) {
+        const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          currentDate.setDate(currentDate.getDate() + 1);
+          continue;
+        }
+      }
+
+      const dateKey = currentDate.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+
+      // Create hourly slots
+      for (const hour of operatingHours) {
+        const hh = String(Math.floor(hour.startMin / 60)).padStart(2, "0");
+        const mm = String(hour.startMin % 60).padStart(2, "0");
+        const hh_end = String(Math.floor(hour.endMin / 60)).padStart(2, "0");
+        const mm_end = String(hour.endMin % 60).padStart(2, "0");
+
+        const startAt = new Date(`${dateKey}T${hh}:${mm}:00+07:00`);
+        const endAt = new Date(`${dateKey}T${hh_end}:${mm_end}:00+07:00`);
+
+        // Check DRY conflict
         const dryConflict = await prisma.booking.findFirst({
           where: {
             simulatorId: input.simulatorId,
             leaseType: "DRY",
             status: { in: ["CONFIRMED", "COMPLETED"] },
-            requestedStartAt: { not: null, lt: ses.endAt },
-            requestedEndAt: { not: null, gt: ses.startAt },
+            requestedStartAt: { not: null, lt: endAt },
+            requestedEndAt: { not: null, gt: startAt },
           },
           select: { id: true },
         });
-
         if (dryConflict) {
           skippedConflict++;
           continue;
         }
 
+        // Check slot conflict
         const conflict = await prisma.scheduleSlot.findFirst({
           where: {
             simulatorId: input.simulatorId,
-            startAt: { lt: ses.endAt },
-            endAt: { gt: ses.startAt },
+            startAt: { lt: endAt },
+            endAt: { gt: startAt },
           },
           select: { id: true },
         });
-
         if (conflict) {
           skippedConflict++;
           continue;
         }
 
+        // Create slot
         await prisma.scheduleSlot.create({
           data: {
             simulatorId: input.simulatorId,
-            startAt: ses.startAt,
-            endAt: ses.endAt,
+            startAt,
+            endAt,
             status: "AVAILABLE",
             createdByAdminId: session.userId,
           },
@@ -140,13 +114,11 @@ export async function POST(req: NextRequest) {
         created++;
       }
 
-      const stepUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" = input.repeatUnit === "MONTH" ? "DAY" : input.repeatUnit;
-      startAt = addInterval(startAt, stepUnit, input.repeatEvery);
-      endAt = addInterval(endAt, stepUnit, input.repeatEvery);
+      currentDate.setDate(currentDate.getDate() + 1);
+      occurrenceCount++;
     }
 
-    // If we hit the guard but still not beyond until, mark stopped.
-    if (startAt.getTime() <= untilExclusive.getTime()) stoppedByLimit = true;
+    if (occurrenceCount >= MAX_OCCURRENCES) stoppedByLimit = true;
 
     return jsonOk({
       created,

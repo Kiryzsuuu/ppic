@@ -20,6 +20,7 @@ enum Role {
   ADMIN
   FINANCE
   INSTRUCTOR
+  REPORT
 }
 
 enum RegistrationType {
@@ -85,7 +86,13 @@ enum TrainingCode {
   PPC
   INITIAL_ATPL
   TYPE_RATING
+  DIFFERENCES
   OTHER
+}
+
+enum BookingType {
+  LEASE
+  TRAINING
 }
 
 enum DeviceType {
@@ -288,8 +295,8 @@ model ScheduleSlot {
   bookingId       String?    @unique
   booking         Booking?   @relation(fields: [bookingId], references: [id])
 
-  createdByAdminId String
-  createdByAdmin   User      @relation("SlotCreatedBy", fields: [createdByAdminId], references: [id])
+  createdByAdminId String?
+  createdByAdmin   User?     @relation("SlotCreatedBy", fields: [createdByAdminId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -303,6 +310,7 @@ model Booking {
   userId       String
   simulatorId  String
 
+  bookingType  BookingType   @default(LEASE)
   leaseType    LeaseType
   trainingCode TrainingCode
   trainingName String
@@ -311,6 +319,7 @@ model Booking {
   personCount  Int?          @default(1)
   paymentMethod PaymentMethod? @default(QRIS)
   preferredSlotId String?
+  institutionName String?
 
   // For DRY leased: user-proposed schedule (not admin-provided slot)
   requestedStartAt DateTime?
